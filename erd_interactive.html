@@ -403,6 +403,21 @@ const TABLES = [
     ['ogimage','varchar',''],
   
   ]},
+  { name: 'community_artist_ro', domain: 'product', cols: [
+    ['community_artist_id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['community_id','bigint','FK'],
+    ['user_id','bigint','FK:users_ro.id'],
+    ['artist_id','bigint','FK:artist_ro._id'],
+    ['name','varchar',''],
+    ['name_set','varchar',''],
+    ['tag_set','varchar',''],
+    ['is_displayed','bigint',''],
+    ['display_order','bigint',''],
+    ['is_push_enabled','bigint',''],
+  
+  ]},
   { name: 'artist_ro', domain: 'product', cols: [
     ['_id','bigint','PK'],
     ['artistid','bigint',''],
@@ -1311,6 +1326,13 @@ const TABLES = [
   ]},
 
   // ── PARTNER ──────────────────────────────────────────────────────
+  { name: 'partner_ro', domain: 'partner', cols: [
+    ['partner_id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['name','varchar',''],
+  
+  ]},
   { name: 'biz_partner_policy_ro', domain: 'partner', cols: [
     ['id','bigint','PK'],
     ['created_at','ts','audit'],
