@@ -13,8 +13,8 @@
 | 컬럼명 | 타입 | 샘플값 | 설명 |
 |--------|------|--------|------|
 | `_id` | BIGINT | 189350116145856 | 식별자 (PK) |
-| `berrizartistid` | BIGINT | 97 |  |
-| `berrizartistname` | VARCHAR | TVXQ! | Enum: GIRLS' GENERATION, KiiiKiii, TVXQ!, WayV, 최유리 |
+| `artistid` | BIGINT | 97 |  |
+| `artistname` | VARCHAR | TVXQ! | Enum: GIRLS' GENERATION, KiiiKiii, TVXQ!, WayV, 최유리 |
 | `bizpartnerid` | BIGINT | 1758779013868 |  |
 | `createdat` | TIMESTAMP | 2025-09-25 12:33:47.859 |  |
 | `deletedat` | VARCHAR | NULL |  ⚠️ NULL 포함 |
@@ -26,7 +26,7 @@
 - `deletedat`: NULL 비율 100%
 
 **Enum성 컬럼 값 목록:**
-- `berrizartistname`: GIRLS' GENERATION / KiiiKiii / TVXQ! / WayV / 최유리
+- `artistname`: GIRLS' GENERATION / KiiiKiii / TVXQ! / WayV / 최유리
 
 **JSON 형식 컬럼:**
 - `i18n`: JSON 형식 (구조 가변적)
@@ -37,8 +37,8 @@
 -- 기본 조회 (최근 1일)
 SELECT
   _id,
-  berrizartistid,
-  berrizartistname,
+  artistid,
+  artistname,
   bizpartnerid,
   createdat,
   deletedat
@@ -48,13 +48,13 @@ LIMIT 100;
 ```
 
 ```sql
--- berrizartistname별 집계
+-- artistname별 집계
 SELECT
-  berrizartistname,
+  artistname,
   COUNT(*) AS cnt
 FROM journi_y222.artist_ro
 WHERE dt = DATE_FORMAT(CURRENT_DATE - INTERVAL '1' DAY, '%Y-%m-%d')
-GROUP BY berrizartistname
+GROUP BY artistname
 ORDER BY cnt DESC;
 ```
 
