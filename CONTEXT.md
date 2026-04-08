@@ -32,11 +32,27 @@
 - 테이블 경로: `journi_y222.테이블명`
 - 파티션 컬럼: `dt` (VARCHAR, 'YYYY-MM-DD')
 
-## 재고수불부 현황 및 과제
-- `stock.sql` 초안: `stock_usage_ro` + `stock_ro` 기반
-- **한계**: 기초재고가 상대값, 날짜 필터 없음, 창고 구분 없음
-- **warehouse_ro 테이블 없음** (warehouse_id만 존재)
-- 필요 테이블: `stock_usage_ro`, `stock_ro`, `incoming_ro`, `incoming_item_ro`, `outgoing_ro`, `outgoing_item_ro`, `adjustment_ro`, `sku_ro`, `sku_group_ro`
+## 재고수불부 현황
+- `stock_ledger.sql`: `stock_usage_ro` 기반 완성 (기초재고+순변동=기말재고 검증 통과)
+- `verify_stock_ledger.py`: stock_sample.xlsx 읽어 Python으로 재현 및 검증
+  - stock_id(창고)별 기초/기말 분리 계산 후 합산 (멀티창고 SKU 대응)
+  - 일별요약에 이월포함 기초/기말재고합계 추가 (활동 없는 SKU 전날 기말 이월)
+- `stock_ledger_result.xlsx`: 재고수불부 + 일별요약 시트
+
+## BOM 구조 (작업지시서 관련)
+- 가이드 테이블 매핑:
+  - `delivery` → `delivery_ro` (delivery_ro.outgoing_id로 outgoing_ro 연결)
+  - `delivery_item` → `delivery_item_ro`
+  - `sku` → `sku_ro` (composition_type = SINGLE / BOM)
+  - `bom_component` → `bundled_sku_ro`
+    - bundled_sku_ro.sku_id = 완제품 SKU
+    - bundled_sku_ro.bundled_sku_id = 구성요소 SKU
+    - bundled_sku_ro.quantity = 구성 단위 수량
+- `work_order.sql`: 6개 시트 쿼리 (출고수량/이관지시서/유니폼제작/재고조정/CJ입고요청/생산입고요청)
+- **BOM 재고 영향**: BOM 완제품 출고 시 stock_usage_ro에 구성요소(SINGLE) 레벨로 대부분 기록됨
+
+## 필요 테이블
+`stock_usage_ro`, `stock_ro`, `incoming_ro`, `incoming_item_ro`, `outgoing_ro`, `outgoing_item_ro`, `adjustment_ro`, `sku_ro`, `sku_group_ro`, `delivery_ro`, `delivery_item_ro`, `bundled_sku_ro`
 
 ## order.sql 알려진 이슈
 - 90번째 줄 문법 오류: `SELECT DISTINCT` 뒤 불필요한 `,`
