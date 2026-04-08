@@ -7,7 +7,7 @@ COL_DESCS / ENUM_VALS / TABLES 타입을 업데이트한다.
 import os, re, json
 
 SCHEMA_DIR = "/Users/journi-y222-l/claude project/raw/datasets"
-ERD_FILE   = "/Users/journi-y222-l/Downloads/erd_interactive.html"
+ERD_FILE   = "/Users/journi-y222-l/claude project/erd_interactive.html"
 
 # ──────────────────────────────────────────────────────────────
 # 1. schema.md 파싱
