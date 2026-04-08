@@ -94,6 +94,20 @@ def to_short_type(type_str):
     return 'varchar'
 
 
+def infer_domain(table_name):
+    t = table_name.lower()
+    if t.startswith('user'):                                                      return 'user'
+    if any(t.startswith(p) for p in ['sku', 'stock', 'adjustment', 'logistics', 'bundled']): return 'sku'
+    if any(t.startswith(p) for p in ['cart', 'checkout', 'order', 'preemptive', 'purchased']): return 'order'
+    if t.startswith('claim'):                                                     return 'claim'
+    if any(t.startswith(p) for p in ['delivery', 'outgoing', 'incoming', 'pickup', 'location', 'international', 'zone', 'remote']): return 'delivery'
+    if any(t.startswith(p) for p in ['pg', 'payment', 'commission', 'exchange_rate']): return 'payment'
+    if t.startswith('coupon'):                                                    return 'coupon'
+    if any(t.startswith(p) for p in ['partner', 'biz_partner', 'contract', 'sale_country']): return 'partner'
+    if any(t.startswith(p) for p in ['mall', 'artist', 'product', 'collection', 'platform', 'sold', 'notice', 'community']): return 'product'
+    return 'etc'
+
+
 # ──────────────────────────────────────────────────────────────
 # 3. 전체 스키마 수집
 # ──────────────────────────────────────────────────────────────
@@ -225,6 +239,30 @@ for table, cols in all_cols.items():
         skipped += 1
 
 print(f"✅ TABLES cols synced: {synced} tables (skipped: {skipped})")
+
+# ──────────────────────────────────────────────────────────────
+# 6-d. 신규 테이블 자동 추가 (ERD TABLES에 없는 schema.md 테이블)
+# ──────────────────────────────────────────────────────────────
+
+existing_tables = set(re.findall(r"\{ name: '([^']+)'", html))
+new_tables = [t for t in all_cols if t not in existing_tables]
+
+if new_tables:
+    new_entries = []
+    for table in sorted(new_tables):
+        domain = infer_domain(table)
+        cols   = all_cols[table]
+        lines  = [f"    ['{c['name']}','{to_short_type(c['type'])}','']" for c in cols]
+        entry  = f"  {{ name: '{table}', domain: '{domain}', cols: [\n"
+        entry += ",\n".join(lines) + ",\n  ]},"
+        new_entries.append(entry)
+
+    insert_block = "\n" + "\n".join(new_entries) + "\n"
+    # TABLES 배열 닫는 ];  바로 앞에 삽입
+    html = re.sub(r'(\n];(\s*//[^\n]*)?\s*\n)', insert_block + r'\1', html, count=1)
+    print(f"✅ TABLES new tables added: {new_tables}")
+else:
+    print("✅ TABLES no new tables")
 
 
 # ──────────────────────────────────────────────────────────────
