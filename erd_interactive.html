@@ -299,87 +299,66 @@
   }
   #query-panel-btn:hover { background: #45475a; }
 
-  /* ── FK Preview Panel ───────────────────────────────────────────── */
-  #fk-preview {
-    position: fixed;
-    top: 50%;
-    right: 20px;
-    transform: translateY(-50%);
-    width: 300px;
-    max-height: 80vh;
-    overflow-y: auto;
-    background: #1e1e2e;
-    border: 1px solid #45475a;
-    border-radius: 10px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    z-index: 200;
-    display: none;
-    flex-direction: column;
-  }
-  #fk-preview.visible { display: flex; }
-  #fk-preview-header {
-    padding: 8px 12px;
-    font-size: 11px;
-    font-weight: 700;
-    color: #a6adc8;
-    border-bottom: 1px solid #313244;
+  /* ── Focus mode layout ──────────────────────────────────────────── */
+  #canvas.focus-mode {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #181825;
-    border-radius: 10px 10px 0 0;
-    position: sticky;
-    top: 0;
-    z-index: 1;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 32px;
+    padding: 24px 32px;
+    min-height: 100%;
   }
-  #fk-preview-header .fk-preview-label {
+  .focus-col {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 14px;
+    min-width: 280px;
+    flex-shrink: 0;
   }
-  #fk-preview-header .fk-preview-from {
-    color: #585b70;
+  .focus-col.center-col {
+    min-width: 300px;
+    align-self: flex-start;
+  }
+  .focus-col-label {
     font-size: 10px;
-    font-weight: 400;
-  }
-  #fk-preview-header .fk-preview-title {
-    color: var(--preview-color, #89b4fa);
-  }
-  #fk-preview-close {
-    background: none;
-    border: none;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: #585b70;
-    cursor: pointer;
-    font-size: 14px;
-    padding: 0 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid #313244;
+    text-align: center;
+    white-space: nowrap;
   }
-  #fk-preview-close:hover { color: #cdd6f4; }
-  #fk-preview-body { padding: 6px 0; }
-  .preview-col-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+  .focus-col-label.label-center { color: #cdd6f4; border-color: #45475a; }
+  .focus-col-label.label-out    { color: #89b4fa; border-color: #89b4fa33; }
+  .focus-col-label.label-in     { color: #a6e3a1; border-color: #a6e3a133; }
+
+  /* Overview button (shown only in focus mode) */
+  #overview-btn {
+    display: none;
     padding: 4px 12px;
-    font-size: 12px;
+    background: #313244;
+    border: 1px solid #45475a;
+    border-radius: 5px;
     color: #cdd6f4;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
   }
-  .preview-col-row.pk-row  { background: rgba(249,226,175,0.06); }
-  .preview-col-row.fk-row  { background: rgba(137,180,250,0.06); }
-  .preview-col-row.matched { background: rgba(166,227,161,0.15); color: #a6e3a1; font-weight: 700; }
-  .preview-col-name { flex: 1; }
-  .preview-col-type { color: #585b70; font-size: 10px; }
-  .preview-badge {
-    font-size: 9px; font-weight: 700; padding: 1px 5px;
-    border-radius: 3px; flex-shrink: 0;
-  }
-  .preview-badge.pk { background: rgba(249,226,175,0.2); color: #f9e2af; }
-  .preview-badge.fk { background: rgba(137,180,250,0.2); color: #89b4fa; }
+  #overview-btn:hover { background: #45475a; }
+  body.focus-mode #overview-btn { display: inline-flex; align-items: center; gap: 4px; }
+  body.focus-mode .domain-btn   { display: none; }
 </style>
 </head>
 <body>
 
 <div id="header">
   <h1>Database ERD</h1>
+  <button id="overview-btn" onclick="exitFocusMode()">← Overview</button>
   <button id="query-panel-btn" onclick="toggleQueryPanel()">📋 SQL 쿼리</button>
 </div>
 
@@ -402,17 +381,6 @@
 </div>
 <div id="tooltip"></div>
 
-<!-- FK Preview Panel -->
-<div id="fk-preview">
-  <div id="fk-preview-header">
-    <div class="fk-preview-label">
-      <span class="fk-preview-from" id="fk-preview-from"></span>
-      <span class="fk-preview-title" id="fk-preview-title"></span>
-    </div>
-    <button id="fk-preview-close" onclick="closeFkPreview()">✕</button>
-  </div>
-  <div id="fk-preview-body"></div>
-</div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════
@@ -2711,6 +2679,7 @@ DOMAIN_ORDER.forEach(domain => {
 });
 
 function toggleDomain(domain, btn) {
+  if (focusState) return; // domain filter only works in overview mode
   domainVisible[domain] = !domainVisible[domain];
   btn.className = 'domain-btn ' + (domainVisible[domain] ? 'active' : 'inactive');
   const col = document.querySelector(`.domain-col[data-domain="${domain}"]`);
@@ -2817,6 +2786,10 @@ function buildTableCard(table) {
       row.dataset.fkCol = ref.slice(dotIdx + 1);
       row.dataset.srcTable = table.name;
       row.dataset.srcCol = colName;
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleFkClick(row);
+      });
     }
 
     // Add description and enum
@@ -2930,6 +2903,9 @@ function drawLine(srcEl, dstEl, color, domain) {
 
 let activeScrollHandler = null;
 
+// Focus mode state: null = overview, {table, col} = focus mode
+let focusState = null;
+
 function clearAllHighlights() {
   document.querySelectorAll('.table-card').forEach(c => {
     c.classList.remove('highlighted', 'dimmed');
@@ -2981,14 +2957,170 @@ function positionTooltip(evt) {
   tooltip.style.top = y + 'px';
 }
 
+// ── Focus mode ───────────────────────────────────────────────────────
+
+function handleFkClick(row) {
+  const srcTable = row.dataset.srcTable;
+  const srcCol   = row.dataset.srcCol;
+
+  // Toggle: same col clicked again → back to overview
+  if (focusState && focusState.table === srcTable && focusState.col === srcCol) {
+    exitFocusMode();
+    return;
+  }
+
+  enterFocusMode(srcTable, srcCol);
+}
+
+function enterFocusMode(tableName, clickedCol) {
+  focusState = { table: tableName, col: clickedCol };
+  document.body.classList.add('focus-mode');
+
+  // Save original canvas children (domain cols) and clear canvas
+  clearLines();
+  hideTooltip();
+
+  // Remove all existing domain columns and focus layout from canvas
+  const existingDomainCols = canvas.querySelectorAll('.domain-col');
+  existingDomainCols.forEach(el => el.remove());
+  const existingFocusCols = canvas.querySelectorAll('.focus-col');
+  existingFocusCols.forEach(el => el.remove());
+
+  canvas.classList.add('focus-mode');
+
+  const sourceTable = TABLES.find(t => t.name === tableName);
+  if (!sourceTable) return;
+
+  const rels = fkIndex[tableName];
+
+  // Gather unique out tables
+  const outTables = [];
+  const outTableNames = new Set();
+  rels.out.forEach(({ dstTable }) => {
+    if (!outTableNames.has(dstTable)) {
+      outTableNames.add(dstTable);
+      const t = TABLES.find(x => x.name === dstTable);
+      if (t) outTables.push(t);
+    }
+  });
+
+  // Gather unique in tables
+  const inTables = [];
+  const inTableNames = new Set();
+  rels.in.forEach(({ srcTable }) => {
+    if (!inTableNames.has(srcTable)) {
+      inTableNames.add(srcTable);
+      const t = TABLES.find(x => x.name === srcTable);
+      if (t) inTables.push(t);
+    }
+  });
+
+  // Build left column (in tables)
+  const leftCol = document.createElement('div');
+  leftCol.className = 'focus-col';
+  const leftLabel = document.createElement('div');
+  leftLabel.className = 'focus-col-label label-in';
+  leftLabel.textContent = inTables.length ? 'References this table' : '(no incoming FKs)';
+  leftCol.appendChild(leftLabel);
+  inTables.forEach(t => leftCol.appendChild(buildTableCard(t)));
+  canvas.appendChild(leftCol);
+
+  // Build center column (source table)
+  const centerCol = document.createElement('div');
+  centerCol.className = 'focus-col center-col';
+  const centerLabel = document.createElement('div');
+  centerLabel.className = 'focus-col-label label-center';
+  centerLabel.textContent = 'Selected Table';
+  centerCol.appendChild(centerLabel);
+  centerCol.appendChild(buildTableCard(sourceTable));
+  canvas.appendChild(centerCol);
+
+  // Build right column (out tables)
+  const rightCol = document.createElement('div');
+  rightCol.className = 'focus-col';
+  const rightLabel = document.createElement('div');
+  rightLabel.className = 'focus-col-label label-out';
+  rightLabel.textContent = outTables.length ? 'Referenced tables (FK targets)' : '(no outgoing FKs)';
+  rightCol.appendChild(rightLabel);
+  outTables.forEach(t => rightCol.appendChild(buildTableCard(t)));
+  canvas.appendChild(rightCol);
+
+  // Draw SVG lines after layout renders
+  requestAnimationFrame(() => {
+    syncSvgSize();
+
+    // Highlight the clicked FK col in the source card
+    const clickedEl = document.getElementById(colId(tableName, clickedCol));
+    if (clickedEl) clickedEl.classList.add('fk-col-highlighted');
+
+    // Draw out lines
+    rels.out.forEach(({ srcCol, dstTable, dstCol }) => {
+      const srcEl = document.getElementById(colId(tableName, srcCol));
+      const dstEl = document.getElementById(colId(dstTable, dstCol));
+      if (srcEl) srcEl.classList.add('fk-col-highlighted');
+      if (dstEl) dstEl.classList.add('col-highlighted');
+      const domain = sourceTable.domain;
+      const color  = DOMAIN_COLORS[domain] || '#89b4fa';
+      drawLine(srcEl, dstEl, color, domain);
+    });
+
+    // Draw in lines
+    rels.in.forEach(({ srcTable, srcCol, dstCol }) => {
+      const srcEl = document.getElementById(colId(srcTable, srcCol));
+      const dstEl = document.getElementById(colId(tableName, dstCol));
+      if (srcEl) srcEl.classList.add('fk-col-highlighted');
+      if (dstEl) dstEl.classList.add('col-highlighted');
+      const inDomain = TABLES.find(t => t.name === srcTable)?.domain;
+      const inColor  = inDomain ? DOMAIN_COLORS[inDomain] : '#a6e3a1';
+      drawLine(srcEl, dstEl, inColor, inDomain || 'user');
+    });
+  });
+}
+
+function exitFocusMode() {
+  focusState = null;
+  document.body.classList.remove('focus-mode');
+  canvas.classList.remove('focus-mode');
+
+  // Remove focus layout
+  const focusCols = canvas.querySelectorAll('.focus-col');
+  focusCols.forEach(el => el.remove());
+  clearLines();
+
+  // Re-render domain columns
+  DOMAIN_ORDER.forEach(domain => {
+    const color = DOMAIN_COLORS[domain];
+    const col = document.createElement('div');
+    col.className = 'domain-col';
+    col.dataset.domain = domain;
+    col.style.setProperty('--color', color);
+    col.style.display = domainVisible[domain] ? 'flex' : 'none';
+
+    const label = document.createElement('div');
+    label.className = 'domain-label';
+    label.style.setProperty('--color', color);
+    label.textContent = domain.toUpperCase();
+    col.appendChild(label);
+
+    byDomain[domain].forEach(table => {
+      col.appendChild(buildTableCard(table));
+    });
+
+    canvas.appendChild(col);
+  });
+
+  requestAnimationFrame(() => syncSvgSize());
+}
+
+// ── Hover interactions (overview mode only) ─────────────────────────
+
 // FK column hover
 document.addEventListener('mouseover', (evt) => {
-  const fkRow = evt.target.closest('.fk-row');
+  if (focusState) return; // no hover effects in focus mode
   const tableHdr = evt.target.closest('.table-header');
   const colRow = evt.target.closest('.col-row');
 
   if (tableHdr) { handleTableHover(tableHdr, evt); return; }
-  if (fkRow)    { handleFkHover(fkRow, evt); return; }
   if (colRow)   { handleColHover(colRow, evt); return; }
 });
 
@@ -2999,116 +3131,15 @@ document.addEventListener('mousemove', (evt) => {
 });
 
 document.addEventListener('mouseout', (evt) => {
-  const fkRow = evt.target.closest('.fk-row');
+  if (focusState) return;
   const tableHdr = evt.target.closest('.table-header');
-  if (!fkRow && !tableHdr) return;
+  const colRow = evt.target.closest('.col-row');
+  if (!colRow && !tableHdr) return;
 
   const related = evt.relatedTarget;
-  if (related && (related.closest('.fk-row') || related.closest('.table-header'))) return;
+  if (related && (related.closest('.col-row') || related.closest('.table-header'))) return;
   clearAllHighlights();
-});
-
-function closeFkPreview() {
-  document.getElementById('fk-preview').classList.remove('visible');
-  clearAllHighlights();
-}
-
-function showFkPreview(srcTable, srcCol, dstTable, dstCol) {
-  const table = TABLES.find(t => t.name === dstTable);
-  if (!table) return;
-
-  const domain = TABLES.find(t => t.name === srcTable)?.domain;
-  const color  = domain ? DOMAIN_COLORS[domain] : '#89b4fa';
-
-  // 헤더
-  const previewEl = document.getElementById('fk-preview');
-  previewEl.style.setProperty('--preview-color', color);
-  document.getElementById('fk-preview-from').textContent = `${srcTable}.${srcCol}  →`;
-  document.getElementById('fk-preview-title').textContent = dstTable;
-
-  // 컬럼 목록 렌더
-  const body = document.getElementById('fk-preview-body');
-  body.innerHTML = '';
-  table.cols.forEach(([colName, colType, flags]) => {
-    const flagParts = flags.split('|');
-    const isPK  = flagParts.includes('PK');
-    const isFk  = flagParts.some(f => f.startsWith('FK:'));
-    const isMatch = colName === dstCol;
-
-    const row = document.createElement('div');
-    row.className = 'preview-col-row';
-    if (isMatch) row.classList.add('matched');
-    else if (isPK) row.classList.add('pk-row');
-    else if (isFk) row.classList.add('fk-row');
-
-    if (isPK) {
-      const b = document.createElement('span');
-      b.className = 'preview-badge pk';
-      b.textContent = 'PK';
-      row.appendChild(b);
-    } else if (isFk) {
-      const b = document.createElement('span');
-      b.className = 'preview-badge fk';
-      b.textContent = 'FK';
-      row.appendChild(b);
-    }
-
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'preview-col-name';
-    nameSpan.textContent = colName;
-    row.appendChild(nameSpan);
-
-    const typeSpan = document.createElement('span');
-    typeSpan.className = 'preview-col-type';
-    typeSpan.textContent = colType;
-    row.appendChild(typeSpan);
-
-    body.appendChild(row);
-  });
-
-  previewEl.classList.add('visible');
-}
-
-function handleFkHover(row, evt) {
-  clearAllHighlights();
-  syncSvgSize();
-
-  const srcTable = row.dataset.srcTable;
-  const srcCol   = row.dataset.srcCol;
-  const dstTable = row.dataset.fkTable;
-  const dstCol   = row.dataset.fkCol;
-
-  // Highlight rows
-  row.classList.add('fk-col-highlighted');
-  const dstEl = document.getElementById(colId(dstTable, dstCol));
-  if (dstEl) dstEl.classList.add('col-highlighted');
-
-  // Dim tables
-  dimAllExcept([srcTable, dstTable]);
-
-  // Draw line (대상이 화면 안에 있을 때만)
-  const domain = TABLES.find(t => t.name === srcTable)?.domain;
-  const color  = domain ? DOMAIN_COLORS[domain] : '#89b4fa';
-  if (dstEl) {
-    drawLine(row, dstEl, color, domain);
-    activeScrollHandler = () => { clearLines(); syncSvgSize(); drawLine(row, dstEl, color, domain); };
-    canvasWrap.addEventListener('scroll', activeScrollHandler);
-  }
-
-  // 우측 패널에 대상 테이블 카드 표시
-  showFkPreview(srcTable, srcCol, dstTable, dstCol);
-
-  // Tooltip
-  const srcDesc = (COL_DESCS[srcTable] || {})[srcCol] || '';
-  const enumStr = (ENUM_VALS[srcTable] || {})[srcCol]?.join(' · ') || '';
-  const html = `<div class="tt-title">${srcTable}</div>
-    <div class="tt-col">${srcCol}</div>
-    ${srcDesc ? `<div class="tt-desc">${srcDesc}</div>` : ''}
-    ${enumStr ? `<div class="tt-section">가능한 값</div><div class="tt-enums">${enumStr}</div>` : ''}
-    <div class="tt-section">관계</div>
-    <div class="tt-item"><span class="tt-arrow">→</span> ${dstTable}.<strong>${dstCol}</strong></div>`;
-  showTooltip(html, evt);
-}
+})
 
 function handleColHover(row, evt) {
   const desc = row.dataset.desc || '';
