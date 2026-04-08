@@ -154,7 +154,7 @@ QUERIES = {
           AND status = 'COMPLETED'
     """,
 
-    # SKU 마스터: incoming_item_ro에 등장한 sku_id 기준으로 필터
+    # SKU 마스터: stock_usage_ro에 등장한 모든 sku_id 기준으로 필터
     "sku_ro": f"""
         SELECT DISTINCT
             s.id,
@@ -173,9 +173,9 @@ QUERIES = {
         FROM {SCHEMA}.sku_ro s
         INNER JOIN (
             SELECT DISTINCT sku_id
-            FROM {SCHEMA}.incoming_item_ro
+            FROM {SCHEMA}.stock_usage_ro
             WHERE dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
-        ) i ON s.id = i.sku_id
+        ) u ON s.id = u.sku_id
         WHERE s.dt BETWEEN '{SKU_FROM}' AND '{SKU_TO}'
           AND s.deleted_at IS NULL
     """,
@@ -191,9 +191,14 @@ QUERIES = {
         FROM {SCHEMA}.sku_group_ro sg
         INNER JOIN (
             SELECT DISTINCT sku_group_id
-            FROM {SCHEMA}.sku_ro
-            WHERE dt BETWEEN '{SKU_FROM}' AND '{SKU_TO}'
-              AND deleted_at IS NULL
+            FROM {SCHEMA}.sku_ro s
+            INNER JOIN (
+                SELECT DISTINCT sku_id
+                FROM {SCHEMA}.stock_usage_ro
+                WHERE dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
+            ) u ON s.id = u.sku_id
+            WHERE s.dt BETWEEN '{SKU_FROM}' AND '{SKU_TO}'
+              AND s.deleted_at IS NULL
         ) s ON sg.id = s.sku_group_id
         WHERE sg.dt BETWEEN '{SKU_FROM}' AND '{SKU_TO}'
           AND sg.deleted_at IS NULL
