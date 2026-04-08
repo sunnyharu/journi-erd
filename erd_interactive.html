@@ -1519,6 +1519,14 @@ const COL_DESCS = {
     status:'상태값',
     deleted_at:'삭제 일시 (NULL이면 미삭제)'
   },
+  community_artist_ro: {
+    community_artist_id:'community_artist 참조 ID (FK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    community_id:'community 참조 ID (FK)',
+    user_id:'user 참조 ID (FK)',
+    artist_id:'artist 참조 ID (FK)'
+  },
   contract_project_ro: {
     _id:'식별자 (PK)',
     name:'Enum: 22_데뷔기념MD, 25_ae_라이선스MD, 25_시즌그리팅_기획MD, 25_예성_콘서트MD, 26_NJ_앨범MD',
@@ -1795,6 +1803,12 @@ const COL_DESCS = {
     origin_outgoing_id:'origin_outgoing 참조 ID (FK)',
     biz_partner_id:'biz_partner 참조 ID (FK)',
     order_snapshot:'JSON 형식 데이터'
+  },
+  partner_ro: {
+    partner_id:'partner 참조 ID (FK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    name:'Enum: TEST, 피나클엔터테인먼트'
   },
   payment_cancel_ro: {
     id:'식별자 (PK)',
@@ -2199,6 +2213,9 @@ const ENUM_VALS = {
   outgoing_ro: {
     method:["PARCEL", "PICKUP"],
     status:["COMPLETED", "WAIT"]
+  },
+  partner_ro: {
+    name:["TEST", "피나클엔터테인먼트"]
   },
   payment_cancel_ro: {
     currency:["JPY", "KRW"],
