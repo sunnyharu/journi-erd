@@ -89,6 +89,7 @@ def sum_delta_by_type(df, type_val, col_name):
 
 incoming_agg   = sum_delta_by_type(su, "INCOMING_COMPLETED",   "입고수량")
 adjustment_agg = sum_delta_by_type(su, "ADJUSTMENT_COMPLETED", "조정수량")
+out_cmp_agg    = sum_delta_by_type(su, "OUTGOING_COMPLETED",   "출고완료")
 out_req_agg    = sum_delta_by_type(su, "OUTGOING_REQUESTED",   "출고요청")
 out_can_agg    = sum_delta_by_type(su, "OUTGOING_CANCELLED",   "출고취소")
 
@@ -113,16 +114,16 @@ sku_info = (
 
 # ── 5. 전체 결합 ──────────────────────────────────────────────────────────────
 base = net_delta.copy()
-for agg_df in [stock_bounds, incoming_agg, adjustment_agg, out_req_agg, out_can_agg]:
+for agg_df in [stock_bounds, incoming_agg, adjustment_agg, out_cmp_agg, out_req_agg, out_can_agg]:
     base = base.merge(agg_df, on=["dt", "sku_id"], how="left")
 
-num_cols = ["기초재고", "입고수량", "조정수량", "출고요청", "출고취소", "기말재고"]
+num_cols = ["기초재고", "입고수량", "조정수량", "출고완료", "출고요청", "출고취소", "기말재고"]
 base[num_cols] = base[num_cols].fillna(0).astype(int)
 
 result = base.merge(sku_info, on="sku_id", how="left")
 result = result[[
     "dt", "sku_id", "sku_nm", "sku_code", "biz_partner_id",
-    "기초재고", "입고수량", "조정수량", "출고요청", "출고취소", "순변동", "기말재고"
+    "기초재고", "입고수량", "조정수량", "출고완료", "출고요청", "출고취소", "순변동", "기말재고"
 ]].sort_values(["dt", "biz_partner_id", "sku_id"])
 
 # ── 6. 검증 출력 ──────────────────────────────────────────────────────────────
@@ -133,11 +134,14 @@ print(f"고유 SKU 수: {result['sku_id'].nunique()}")
 print("\n[일별 요약]")
 summary = result.groupby("dt").agg(
     SKU수=("sku_id", "nunique"),
+    기초재고합계=("기초재고", "sum"),
     입고합계=("입고수량", "sum"),
     조정합계=("조정수량", "sum"),
+    출고완료합계=("출고완료", "sum"),
     출고요청합계=("출고요청", "sum"),
     출고취소합계=("출고취소", "sum"),
     순변동합계=("순변동", "sum"),
+    기말재고합계=("기말재고", "sum"),
 ).reset_index()
 print(summary.to_string(index=False))
 
@@ -170,8 +174,10 @@ with pd.ExcelWriter(OUTPUT_FILE, engine="openpyxl") as writer:
 
     # ── 재고수불부 시트 ──
     ws = wb["재고수불부"]
+    # A~M: dt, sku_id, sku_nm, sku_code, biz_partner_id,
+    #        기초재고, 입고수량, 조정수량, 출고완료, 출고요청, 출고취소, 순변동, 기말재고
     col_widths = {"A":12,"B":20,"C":40,"D":22,"E":18,
-                  "F":12,"G":12,"H":12,"I":12,"J":12,"K":12,"L":12}
+                  "F":12,"G":12,"H":12,"I":12,"J":12,"K":12,"L":12,"M":12}
     for col_letter, width in col_widths.items():
         ws.column_dimensions[col_letter].width = width
 
@@ -180,7 +186,7 @@ with pd.ExcelWriter(OUTPUT_FILE, engine="openpyxl") as writer:
         cell.fill      = header_fill
         cell.alignment = header_align
 
-    num_col_idx = set(range(6, 13))  # F~L (1-indexed)
+    num_col_idx = set(range(6, 14))  # F~M (1-indexed)
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
         for cell in row:
             cell.font = Font(name="Arial")
