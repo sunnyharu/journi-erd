@@ -183,24 +183,48 @@ if old_enum_vals:
 else:
     print("⚠️  ENUM_VALS not found")
 
-# 6-c. TABLES 내 컬럼 타입 업데이트
-# 각 테이블의 cols 배열에서 ['colname','oldtype','annotation'] 패턴을 찾아
-# schema.md 기반의 새 타입으로 교체 (annotation은 유지)
+# 6-c. TABLES cols 완전 동기화 (컬럼명 + 타입 재구성, annotation 보존)
 
-type_updates = 0
+def sync_table_cols(html, table, schema_cols):
+    """
+    schema.md 기준으로 ERD HTML의 테이블 cols 배열을 재구성.
+    - 컬럼명 추가/제거/변경 반영
+    - 기존 annotation(PK, FK:..., audit 등) 보존
+    - 타입도 schema.md 기준으로 갱신
+    """
+    pattern = rf"(\{{ name: '{re.escape(table)}'.*?cols: \[)(.*?)(\n  \]\}})"
+    m = re.search(pattern, html, re.DOTALL)
+    if not m:
+        return html, 0
+
+    cols_content = m.group(2)
+
+    # 기존 annotation 맵 추출 (col_name → annotation)
+    annotation_map = {}
+    for cm in re.finditer(r"\['([^']+)',\s*'[^']*',\s*'([^']*)'\]", cols_content):
+        annotation_map[cm.group(1)] = cm.group(2)
+
+    # schema.md 기준 새 cols 구성
+    new_lines = []
+    for col in schema_cols:
+        name = col['name']
+        typ  = to_short_type(col['type'])
+        ann  = annotation_map.get(name, '')
+        new_lines.append(f"    ['{name}','{typ}','{ann}']")
+
+    new_cols = '\n' + ',\n'.join(new_lines) + ',\n  '
+    new_html = html[:m.start(2)] + new_cols + html[m.end(2):]
+    return new_html, 1
+
+synced, skipped = 0, 0
 for table, cols in all_cols.items():
-    type_map = {c['name']: to_short_type(c['type']) for c in cols}
-    for col_name, new_type in type_map.items():
-        # ['col_name','old_type','annotation']  or  ['col_name','old_type']
-        pattern = rf"(\['{re.escape(col_name)}',\s*')[^']*('(?:,\s*'[^']*')?\])"
-        def replacer(m, nt=new_type):
-            return m.group(1) + nt + m.group(2)
-        new_html, n = re.subn(pattern, replacer, html)
-        if n > 0:
-            html = new_html
-            type_updates += n
+    html, updated = sync_table_cols(html, table, cols)
+    if updated:
+        synced += 1
+    else:
+        skipped += 1
 
-print(f"✅ TABLES type updates: {type_updates} cells")
+print(f"✅ TABLES cols synced: {synced} tables (skipped: {skipped})")
 
 
 # ──────────────────────────────────────────────────────────────
