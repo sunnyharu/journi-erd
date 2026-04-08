@@ -19,10 +19,8 @@ SCHEMA      = 'ods_commerce_production'
 START_DATE  = '2026-03-23'
 END_DATE    = '2026-03-29'
 SKU_START   = '2025-11-20'
-OUTPUT_DIR  = './stock_sample'
+OUTPUT_FILE = './stock_sample.xlsx'
 # =================
-
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ===== 테이블별 쿼리 정의 =====
 QUERIES = {
@@ -208,20 +206,20 @@ QUERIES = {
     """,
 }
 
-# ===== 실행 및 CSV 저장 =====
-for table, sql in QUERIES.items():
-    try:
-        print(f"[{table}] 쿼리 실행 중...")
-        cur.execute(sql)
-        rows = cur.fetchall()
-        cols = [d[0] for d in cur.description]
-        df   = pd.DataFrame(rows, columns=cols)
-        path = os.path.join(OUTPUT_DIR, f"{table}.csv")
-        df.to_csv(path, index=False, encoding='utf-8-sig')
-        print(f"[{table}] {len(df)}행 → {path}")
-    except Exception as e:
-        print(f"[{table}] ❌ 실패: {e}")
+# ===== 실행 및 엑셀 저장 =====
+with pd.ExcelWriter(OUTPUT_FILE, engine='openpyxl') as writer:
+    for table, sql in QUERIES.items():
+        try:
+            print(f"[{table}] 쿼리 실행 중...")
+            cur.execute(sql)
+            rows = cur.fetchall()
+            cols = [d[0] for d in cur.description]
+            df   = pd.DataFrame(rows, columns=cols)
+            df.to_excel(writer, sheet_name=table[:31], index=False)
+            print(f"[{table}] {len(df)}행 저장 완료")
+        except Exception as e:
+            print(f"[{table}] ❌ 실패: {e}")
 
 cur.cancel()
 conn.close()
-print(f"\n✅ 완료: {OUTPUT_DIR}/")
+print(f"\n✅ 완료: {OUTPUT_FILE}")
