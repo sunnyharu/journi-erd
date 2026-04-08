@@ -31,14 +31,15 @@ su["delta"]            = pd.to_numeric(su["delta"])
 su["dt"] = su["updated_at"].dt.date.astype(str)
 
 # ── 2. 체인 기반 기초재고 / 기말재고 계산 ─────────────────────────────────────
-def get_opening_closing(group):
-    """
-    (dt, sku_id) 그룹 내에서 체인 집합 방식으로 기초/기말재고를 계산.
+# stock_id(창고)별로 체인을 분리해 기초/기말을 계산한 뒤 합산.
+# 동일 SKU가 여러 창고에 분산된 경우에도 정확히 처리됨.
 
-    - opening: before_quantity 집합 중 어떤 이벤트의 after_quantity에도 없는 값 = 체인 시작점
-    - closing: after_quantity 집합 중 어떤 이벤트의 before_quantity에도 없는 값 = 체인 끝점
-    - 순환 체인(ex: 조정-5 후 입고+5, 동일 재고 복귀)인 경우:
-        가장 이른/늦은 타임스탬프 그룹에서 재귀적으로 시작/끝 탐색
+def get_opening_closing_per_stock(group):
+    """
+    (dt, sku_id, stock_id) 단위로 체인 집합 방식으로 기초/기말재고를 계산.
+    - opening: before_quantity 집합 중 어떤 이벤트의 after_quantity에도 없는 값
+    - closing: after_quantity 집합 중 어떤 이벤트의 before_quantity에도 없는 값
+    - 순환 체인인 경우 가장 이른/늦은 타임스탬프 기준으로 fallback
     """
     bq_set = set(group["before_quantity"])
     aq_set = set(group["after_quantity"])
@@ -63,9 +64,15 @@ def get_opening_closing(group):
 
     return pd.Series({"기초재고": int(opening), "기말재고": int(closing)})
 
+# stock_id별로 기초/기말 계산 후 (dt, sku_id) 단위로 합산
+per_stock = (
+    su.groupby(["dt", "sku_id", "stock_id"])
+    .apply(get_opening_closing_per_stock, include_groups=False)
+    .reset_index()
+)
 stock_bounds = (
-    su.groupby(["dt", "sku_id"])
-    .apply(get_opening_closing, include_groups=False)
+    per_stock.groupby(["dt", "sku_id"])[["기초재고", "기말재고"]]
+    .sum()
     .reset_index()
 )
 
