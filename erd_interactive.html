@@ -298,6 +298,82 @@
     cursor: pointer; font-family: inherit;
   }
   #query-panel-btn:hover { background: #45475a; }
+
+  /* ── FK Preview Panel ───────────────────────────────────────────── */
+  #fk-preview {
+    position: fixed;
+    top: 50%;
+    right: 20px;
+    transform: translateY(-50%);
+    width: 300px;
+    max-height: 80vh;
+    overflow-y: auto;
+    background: #1e1e2e;
+    border: 1px solid #45475a;
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    z-index: 200;
+    display: none;
+    flex-direction: column;
+  }
+  #fk-preview.visible { display: flex; }
+  #fk-preview-header {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #a6adc8;
+    border-bottom: 1px solid #313244;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #181825;
+    border-radius: 10px 10px 0 0;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  #fk-preview-header .fk-preview-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  #fk-preview-header .fk-preview-from {
+    color: #585b70;
+    font-size: 10px;
+    font-weight: 400;
+  }
+  #fk-preview-header .fk-preview-title {
+    color: var(--preview-color, #89b4fa);
+  }
+  #fk-preview-close {
+    background: none;
+    border: none;
+    color: #585b70;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 4px;
+  }
+  #fk-preview-close:hover { color: #cdd6f4; }
+  #fk-preview-body { padding: 6px 0; }
+  .preview-col-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: #cdd6f4;
+  }
+  .preview-col-row.pk-row  { background: rgba(249,226,175,0.06); }
+  .preview-col-row.fk-row  { background: rgba(137,180,250,0.06); }
+  .preview-col-row.matched { background: rgba(166,227,161,0.15); color: #a6e3a1; font-weight: 700; }
+  .preview-col-name { flex: 1; }
+  .preview-col-type { color: #585b70; font-size: 10px; }
+  .preview-badge {
+    font-size: 9px; font-weight: 700; padding: 1px 5px;
+    border-radius: 3px; flex-shrink: 0;
+  }
+  .preview-badge.pk { background: rgba(249,226,175,0.2); color: #f9e2af; }
+  .preview-badge.fk { background: rgba(137,180,250,0.2); color: #89b4fa; }
 </style>
 </head>
 <body>
@@ -325,6 +401,18 @@
   </div>
 </div>
 <div id="tooltip"></div>
+
+<!-- FK Preview Panel -->
+<div id="fk-preview">
+  <div id="fk-preview-header">
+    <div class="fk-preview-label">
+      <span class="fk-preview-from" id="fk-preview-from"></span>
+      <span class="fk-preview-title" id="fk-preview-title"></span>
+    </div>
+    <button id="fk-preview-close" onclick="closeFkPreview()">✕</button>
+  </div>
+  <div id="fk-preview-body"></div>
+</div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════
@@ -2920,43 +3008,65 @@ document.addEventListener('mouseout', (evt) => {
   clearAllHighlights();
 });
 
-function scrollIntoViewBoth(srcEl, dstEl, callback) {
-  if (!dstEl) { callback(); return; }
+function closeFkPreview() {
+  document.getElementById('fk-preview').classList.remove('visible');
+  clearAllHighlights();
+}
 
-  const wrapRect = canvasWrap.getBoundingClientRect();
-  const srcRect  = srcEl.getBoundingClientRect();
-  const dstRect  = dstEl.getBoundingClientRect();
+function showFkPreview(srcTable, srcCol, dstTable, dstCol) {
+  const table = TABLES.find(t => t.name === dstTable);
+  if (!table) return;
 
-  // 대상이 이미 뷰포트 안에 있으면 바로 실행
-  const dstVisible = dstRect.top >= wrapRect.top && dstRect.bottom <= wrapRect.bottom
-                  && dstRect.left >= wrapRect.left && dstRect.right <= wrapRect.right;
-  if (dstVisible) { callback(); return; }
+  const domain = TABLES.find(t => t.name === srcTable)?.domain;
+  const color  = domain ? DOMAIN_COLORS[domain] : '#89b4fa';
 
-  // 소스와 대상 모두 보이도록 스크롤 위치 계산
-  const scrollLeft = canvasWrap.scrollLeft;
-  const scrollTop  = canvasWrap.scrollTop;
+  // 헤더
+  const previewEl = document.getElementById('fk-preview');
+  previewEl.style.setProperty('--preview-color', color);
+  document.getElementById('fk-preview-from').textContent = `${srcTable}.${srcCol}  →`;
+  document.getElementById('fk-preview-title').textContent = dstTable;
 
-  const srcCX = srcRect.left - wrapRect.left + scrollLeft + srcRect.width / 2;
-  const dstCX = dstRect.left - wrapRect.left + scrollLeft + dstRect.width / 2;
-  const srcCY = srcRect.top  - wrapRect.top  + scrollTop  + srcRect.height / 2;
-  const dstCY = dstRect.top  - wrapRect.top  + scrollTop  + dstRect.height / 2;
+  // 컬럼 목록 렌더
+  const body = document.getElementById('fk-preview-body');
+  body.innerHTML = '';
+  table.cols.forEach(([colName, colType, flags]) => {
+    const flagParts = flags.split('|');
+    const isPK  = flagParts.includes('PK');
+    const isFk  = flagParts.some(f => f.startsWith('FK:'));
+    const isMatch = colName === dstCol;
 
-  const midX = (srcCX + dstCX) / 2 - wrapRect.width  / 2;
-  const midY = (srcCY + dstCY) / 2 - wrapRect.height / 2;
+    const row = document.createElement('div');
+    row.className = 'preview-col-row';
+    if (isMatch) row.classList.add('matched');
+    else if (isPK) row.classList.add('pk-row');
+    else if (isFk) row.classList.add('fk-row');
 
-  canvasWrap.scrollTo({ left: Math.max(0, midX), top: Math.max(0, midY), behavior: 'smooth' });
+    if (isPK) {
+      const b = document.createElement('span');
+      b.className = 'preview-badge pk';
+      b.textContent = 'PK';
+      row.appendChild(b);
+    } else if (isFk) {
+      const b = document.createElement('span');
+      b.className = 'preview-badge fk';
+      b.textContent = 'FK';
+      row.appendChild(b);
+    }
 
-  // 스크롤 완료 후 콜백
-  const onScrollEnd = () => {
-    clearTimeout(timer);
-    canvasWrap.removeEventListener('scroll', onScrollEnd);
-    callback();
-  };
-  let timer = setTimeout(() => {
-    canvasWrap.removeEventListener('scroll', onScrollEnd);
-    callback();
-  }, 400);
-  canvasWrap.addEventListener('scroll', onScrollEnd, { once: true });
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'preview-col-name';
+    nameSpan.textContent = colName;
+    row.appendChild(nameSpan);
+
+    const typeSpan = document.createElement('span');
+    typeSpan.className = 'preview-col-type';
+    typeSpan.textContent = colType;
+    row.appendChild(typeSpan);
+
+    body.appendChild(row);
+  });
+
+  previewEl.classList.add('visible');
 }
 
 function handleFkHover(row, evt) {
@@ -2976,8 +3086,17 @@ function handleFkHover(row, evt) {
   // Dim tables
   dimAllExcept([srcTable, dstTable]);
 
+  // Draw line (대상이 화면 안에 있을 때만)
   const domain = TABLES.find(t => t.name === srcTable)?.domain;
   const color  = domain ? DOMAIN_COLORS[domain] : '#89b4fa';
+  if (dstEl) {
+    drawLine(row, dstEl, color, domain);
+    activeScrollHandler = () => { clearLines(); syncSvgSize(); drawLine(row, dstEl, color, domain); };
+    canvasWrap.addEventListener('scroll', activeScrollHandler);
+  }
+
+  // 우측 패널에 대상 테이블 카드 표시
+  showFkPreview(srcTable, srcCol, dstTable, dstCol);
 
   // Tooltip
   const srcDesc = (COL_DESCS[srcTable] || {})[srcCol] || '';
@@ -2989,21 +3108,6 @@ function handleFkHover(row, evt) {
     <div class="tt-section">관계</div>
     <div class="tt-item"><span class="tt-arrow">→</span> ${dstTable}.<strong>${dstCol}</strong></div>`;
   showTooltip(html, evt);
-
-  // 대상 테이블이 화면 밖이면 스크롤 후 라인 그리기
-  scrollIntoViewBoth(row, dstEl, () => {
-    clearLines();
-    syncSvgSize();
-    drawLine(row, dstEl, color, domain);
-
-    // Redraw on scroll
-    activeScrollHandler = () => {
-      clearLines();
-      syncSvgSize();
-      drawLine(row, dstEl, color, domain);
-    };
-    canvasWrap.addEventListener('scroll', activeScrollHandler);
-  });
 }
 
 function handleColHover(row, evt) {
