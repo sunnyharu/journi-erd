@@ -133,16 +133,42 @@ print(f"고유 SKU 수: {result['sku_id'].nunique()}")
 
 print("\n[일별 요약]")
 summary = result.groupby("dt").agg(
-    SKU수=("sku_id", "nunique"),
-    기초재고합계=("기초재고", "sum"),
+    활동SKU수=("sku_id", "nunique"),
     입고합계=("입고수량", "sum"),
     조정합계=("조정수량", "sum"),
     출고완료합계=("출고완료", "sum"),
     출고요청합계=("출고요청", "sum"),
     출고취소합계=("출고취소", "sum"),
     순변동합계=("순변동", "sum"),
-    기말재고합계=("기말재고", "sum"),
 ).reset_index()
+
+# 기말재고합계(이월포함): 미활동 SKU는 전날 기말재고 이월
+closing_pivot = stock_bounds.pivot(index="sku_id", columns="dt", values="기말재고")
+closing_ffill = closing_pivot.ffill(axis=1)
+opening_pivot = stock_bounds.pivot(index="sku_id", columns="dt", values="기초재고")
+
+closing_total = closing_ffill.sum(axis=0).rename("기말재고합계_이월포함").reset_index()
+closing_total.columns = ["dt", "기말재고합계_이월포함"]
+closing_total["기말재고합계_이월포함"] = closing_total["기말재고합계_이월포함"].astype(int)
+
+# 기초재고합계(이월포함): 당일 활동 SKU의 기초재고 + 전날 기말재고 이월 SKU
+#  = 전날 기말재고합계_이월포함 (연속성 확인용)
+prev_closing = closing_ffill.shift(1, axis=1)
+opening_total_ffill = prev_closing.sum(axis=0).rename("기초재고합계_이월포함").reset_index()
+opening_total_ffill.columns = ["dt", "기초재고합계_이월포함"]
+opening_total_ffill["기초재고합계_이월포함"] = opening_total_ffill["기초재고합계_이월포함"].fillna(0).astype(int)
+
+summary = (
+    summary
+    .merge(closing_total, on="dt", how="left")
+    .merge(opening_total_ffill, on="dt", how="left")
+)
+# 컬럼 순서 정리
+summary = summary[[
+    "dt", "활동SKU수", "기초재고합계_이월포함",
+    "입고합계", "조정합계", "출고완료합계", "출고요청합계", "출고취소합계",
+    "순변동합계", "기말재고합계_이월포함"
+]]
 print(summary.to_string(index=False))
 
 print("\n[상위 10행 미리보기]")
@@ -200,7 +226,18 @@ with pd.ExcelWriter(OUTPUT_FILE, engine="openpyxl") as writer:
         cell.font      = header_font
         cell.fill      = header_fill
         cell.alignment = header_align
-    for col in ws2.columns:
-        ws2.column_dimensions[get_column_letter(col[0].column)].width = 16
+    # 열 너비: dt=14, 활동SKU수=12, 나머지 숫자열=18
+    ws2.column_dimensions["A"].width = 14
+    ws2.column_dimensions["B"].width = 12
+    for col in ws2.iter_cols(min_col=3, max_col=ws2.max_column):
+        ws2.column_dimensions[get_column_letter(col[0].column)].width = 18
+    # 숫자열 포맷 (C열 이후)
+    num_col_summary = set(range(3, ws2.max_column + 1))
+    for row in ws2.iter_rows(min_row=2, max_row=ws2.max_row):
+        for cell in row:
+            cell.font = Font(name="Arial")
+            if cell.column in num_col_summary:
+                cell.number_format = num_fmt
+                cell.alignment = Alignment(horizontal="right")
 
 print(f"\n저장 완료: {OUTPUT_FILE}")
