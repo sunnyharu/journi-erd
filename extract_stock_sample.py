@@ -15,9 +15,13 @@ conn = prestodb.dbapi.connect(
 cur = conn.cursor()
 
 # ===== 설정값 =====
-SCHEMA    = 'ods_commerce_production'
-BASE_DATE = '2025-03-20'
+SCHEMA     = 'ods_commerce_production'
+DATE_FROM  = '20260323'   # 재고 변동 테이블 시작일 (dt 파티션 형식)
+DATE_TO    = '20260329'   # 재고 변동 테이블 종료일
+SKU_FROM   = '20251120'   # SKU 마스터 테이블 시작일
+SKU_TO     = '20260329'   # SKU 마스터 테이블 종료일
 OUTPUT_DIR = './stock_sample'
+LIMIT      = 0            # 0이면 전체, 느리면 10000 등으로 제한
 # =================
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -39,10 +43,10 @@ QUERIES = {
             after_quantity,
             delta
         FROM {SCHEMA}.stock_usage_ro
-        WHERE dt = '{BASE_DATE}'
+        WHERE dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
     """,
 
-    # 현재 재고 스냅샷: SKU별 실물/가용/예약 재고
+    # 재고 스냅샷: SKU별 실물/가용/예약 재고
     "stock_ro": f"""
         SELECT
             id,
@@ -53,10 +57,10 @@ QUERIES = {
             reserved_quantity,
             updated_at
         FROM {SCHEMA}.stock_ro
-        WHERE dt = '{BASE_DATE}'
+        WHERE dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
     """,
 
-    # 입고 헤더: 당일 완료된 입고 (발주/반품 등 유형 포함)
+    # 입고 헤더: 완료된 입고 (발주/반품 등 유형 포함)
     "incoming_ro": f"""
         SELECT
             id,
@@ -69,9 +73,8 @@ QUERIES = {
             ref_type,
             ref_id
         FROM {SCHEMA}.incoming_ro
-        WHERE dt = '{BASE_DATE}'
+        WHERE dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
           AND status = 'COMPLETED'
-          AND date(date_format(completed_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d')) = date('{BASE_DATE}')
     """,
 
     # 입고 상세: SKU별 입고 수량
@@ -90,14 +93,13 @@ QUERIES = {
         INNER JOIN (
             SELECT id
             FROM {SCHEMA}.incoming_ro
-            WHERE dt = '{BASE_DATE}'
+            WHERE dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
               AND status = 'COMPLETED'
-              AND date(date_format(completed_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d')) = date('{BASE_DATE}')
         ) b ON a.incoming_id = b.id
-        WHERE a.dt = '{BASE_DATE}'
+        WHERE a.dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
     """,
 
-    # 출고 헤더: 당일 출고 (주문/B2B 등 유형 포함)
+    # 출고 헤더: 출고 (주문/B2B 등 유형 포함)
     "outgoing_ro": f"""
         SELECT
             id,
@@ -111,8 +113,7 @@ QUERIES = {
             biz_partner_id,
             updated_at
         FROM {SCHEMA}.outgoing_ro
-        WHERE dt = '{BASE_DATE}'
-          AND date(date_format(updated_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d')) = date('{BASE_DATE}')
+        WHERE dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
     """,
 
     # 출고 상세: SKU별 출고 수량
@@ -131,10 +132,9 @@ QUERIES = {
         INNER JOIN (
             SELECT id
             FROM {SCHEMA}.outgoing_ro
-            WHERE dt = '{BASE_DATE}'
-              AND date(date_format(updated_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d')) = date('{BASE_DATE}')
+            WHERE dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
         ) b ON a.outgoing_id = b.id
-        WHERE a.dt = '{BASE_DATE}'
+        WHERE a.dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
     """,
 
     # 재고 조정: 실사/손망실/이관 등
@@ -150,43 +150,53 @@ QUERIES = {
             adjusting_quantity,
             updated_at
         FROM {SCHEMA}.adjustment_ro
-        WHERE dt = '{BASE_DATE}'
+        WHERE dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
           AND status = 'COMPLETED'
-          AND date(date_format(updated_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d')) = date('{BASE_DATE}')
     """,
 
-    # SKU 마스터: 상품명/코드/바코드 등
+    # SKU 마스터: incoming_item_ro에 등장한 sku_id 기준으로 필터
     "sku_ro": f"""
-        SELECT
-            id,
-            name,
-            sku_code,
-            barcode,
-            status,
-            type,
-            composition_type,
-            sku_group_id,
-            price_amount,
-            currency,
-            country_of_origin,
-            usage_type,
-            deleted_at
-        FROM {SCHEMA}.sku_ro
-        WHERE dt = '{BASE_DATE}'
-          AND deleted_at IS NULL
+        SELECT DISTINCT
+            s.id,
+            s.name,
+            s.sku_code,
+            s.barcode,
+            s.status,
+            s.type,
+            s.composition_type,
+            s.sku_group_id,
+            s.price_amount,
+            s.currency,
+            s.country_of_origin,
+            s.usage_type,
+            s.deleted_at
+        FROM {SCHEMA}.sku_ro s
+        INNER JOIN (
+            SELECT DISTINCT sku_id
+            FROM {SCHEMA}.incoming_item_ro
+            WHERE dt BETWEEN '{DATE_FROM}' AND '{DATE_TO}'
+        ) i ON s.id = i.sku_id
+        WHERE s.dt BETWEEN '{SKU_FROM}' AND '{SKU_TO}'
+          AND s.deleted_at IS NULL
     """,
 
-    # SKU 그룹: 파트너/브랜드 연결
+    # SKU 그룹: sku_ro에 등장한 sku_group_id 기준으로 필터
     "sku_group_ro": f"""
-        SELECT
-            id,
-            biz_partner_id,
-            code,
-            code_name,
-            deleted_at
-        FROM {SCHEMA}.sku_group_ro
-        WHERE dt = '{BASE_DATE}'
-          AND deleted_at IS NULL
+        SELECT DISTINCT
+            sg.id,
+            sg.biz_partner_id,
+            sg.code,
+            sg.code_name,
+            sg.deleted_at
+        FROM {SCHEMA}.sku_group_ro sg
+        INNER JOIN (
+            SELECT DISTINCT sku_group_id
+            FROM {SCHEMA}.sku_ro
+            WHERE dt BETWEEN '{SKU_FROM}' AND '{SKU_TO}'
+              AND deleted_at IS NULL
+        ) s ON sg.id = s.sku_group_id
+        WHERE sg.dt BETWEEN '{SKU_FROM}' AND '{SKU_TO}'
+          AND sg.deleted_at IS NULL
     """,
 }
 
@@ -194,7 +204,8 @@ QUERIES = {
 for table, sql in QUERIES.items():
     try:
         print(f"[{table}] 쿼리 실행 중...")
-        cur.execute(sql)
+        limited_sql = f"SELECT * FROM ({sql}) t LIMIT {LIMIT}" if LIMIT > 0 else sql
+        cur.execute(limited_sql)
         rows = cur.fetchall()
         cols = [d[0] for d in cur.description]
         df   = pd.DataFrame(rows, columns=cols)
