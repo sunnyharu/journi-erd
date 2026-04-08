@@ -16,7 +16,9 @@
 ├── stock_ledger.sql            # 재고수불부 Presto 쿼리
 ├── stock_ledger_result.xlsx    # 재고수불부 검증 결과 (재고수불부 + 일별요약 시트)
 ├── verify_stock_ledger.py      # stock_sample.xlsx 기반 재고수불부 Python 검증 스크립트
-├── work_order.sql              # 작업지시서 6개 시트 Presto 쿼리
+├── work_order.sql              # 작업지시서 6개 시트 Presto 쿼리 (ERD 기준, dt 없음)
+├── sku_dashboard.py            # SKU 통합 현황 대시보드 생성 스크립트
+├── sku_dashboard.xlsx          # SKU 통합 현황 결과 (4개 시트)
 ├── order.sql                   # 판매 집계 쿼리 (Presto)
 ├── stock.sql                   # 재고수불부 쿼리 초안 (구버전)
 └── raw/datasets/               # 67개 테이블 schema.md 파일
@@ -116,6 +118,36 @@
   - BOM OUTGOING_COMPLETED: 123건 vs SINGLE OUTGOING_COMPLETED: 19,139건
 
 ---
+
+## SKU 통합 대시보드 (sku_dashboard.py)
+
+### 개요
+재고가용 + 출고이행률 + 기간재고변동을 SKU 기준으로 통합한 Excel 대시보드.
+`stock_sample.xlsx` 읽어서 `sku_dashboard.xlsx` 생성.
+
+### 시트 구성
+| 시트 | 대상 | 내용 |
+|------|------|------|
+| 전체현황 | 전체 조회 | 434개 SKU 전체 |
+| 미처리출고 🔴 | 물류팀 | 미처리수량 > 0인 58개 SKU |
+| 재고부족위험 ⚠️ | MD/운영팀 | 가용재고 < 미처리수량인 46개 SKU |
+| 이행완료 ✅ | 운영팀 | 이행률 100%인 153개 SKU |
+
+### 컬럼 구성 (색상 섹션 구분)
+- **[기본정보]** SKU ID/명/코드/거래처/구성유형/상태
+- **[재고가용현황]** 물리재고, 가용재고, 예약재고 (stock_ro)
+- **[출고이행률]** 출고지시수량, 실출고수량, 미처리수량, 이행률(%), 미처리사유 (outgoing_item_ro)
+- **[기간변동]** 기간_입고, 기간_출고완료, 기간_조정 (stock_usage_ro)
+
+### 기간변동 설명
+- 샘플 기간(03-23~03-29) 동안 stock_usage_ro에 기록된 실제 재고 이벤트 집계
+- 기간_출고완료 ≈ 실출고수량 이어야 정상 (차이 발생 시 직접 재고 조정 가능성)
+- **다음 세션 논의 사항**: 기간변동과 출고이행률 중복 여부 검토, 필요시 통합
+
+### 현재 데이터 한계
+- 주문(orders_ro, order_line_ro) 데이터 없음 → 주문→출고→배송 전체 추적 불가
+- stock_usage_ro에 OUTGOING_REQUESTED 없음 → 출고 예약은 stock_ro에서 직접 차감하는 방식
+- 샘플 기간 한정 데이터 (실시간 아님)
 
 ## 알려진 이슈
 - `order.sql` 90번째 줄: `SELECT DISTINCT` 뒤 불필요한 `,` (문법 오류)
