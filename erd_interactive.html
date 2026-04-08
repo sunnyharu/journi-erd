@@ -1,0 +1,2974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive ERD — Database Schema</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #11111b;
+    color: #cdd6f4;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────── */
+  #header {
+    height: 50px;
+    background: #181825;
+    border-bottom: 1px solid #313244;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    flex-shrink: 0;
+    z-index: 100;
+    overflow-x: auto;
+  }
+  #header h1 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #cdd6f4;
+    white-space: nowrap;
+    margin-right: 8px;
+  }
+  .domain-btn {
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: 1.5px solid transparent;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s, background 0.15s;
+    background: transparent;
+  }
+  .domain-btn.active {
+    border-color: var(--color);
+    color: var(--color);
+  }
+  .domain-btn.inactive {
+    border-color: #45475a;
+    color: #585b70;
+  }
+
+  /* ── Canvas ─────────────────────────────────────────────────────── */
+  #canvas-wrap {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+  }
+  #canvas {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 20px;
+    min-height: 100%;
+    position: relative;
+  }
+
+  /* ── SVG overlay ─────────────────────────────────────────────────── */
+  #svg-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    z-index: 50;
+  }
+
+  /* ── Domain column ──────────────────────────────────────────────── */
+  .domain-col {
+    width: 280px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .domain-label {
+    position: sticky;
+    top: 0;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    z-index: 10;
+    background: #181825;
+    border: 1px solid var(--color);
+    color: var(--color);
+  }
+
+  /* ── Table card ─────────────────────────────────────────────────── */
+  .table-card {
+    background: #1e1e2e;
+    border-radius: 8px;
+    border-left: 3px solid var(--color);
+    overflow: hidden;
+    transition: box-shadow 0.2s, opacity 0.2s, filter 0.2s;
+  }
+  .table-card.highlighted {
+    box-shadow: 0 0 0 2px var(--color), 0 0 20px color-mix(in srgb, var(--color) 30%, transparent);
+  }
+  .table-card.dimmed {
+    opacity: 0.25;
+    filter: saturate(0.3);
+  }
+
+  /* ── Table header ───────────────────────────────────────────────── */
+  .table-header {
+    background: color-mix(in srgb, var(--color) 18%, #1e1e2e);
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--color) 25%, #313244);
+    transition: background 0.15s;
+  }
+  .table-header:hover {
+    background: color-mix(in srgb, var(--color) 30%, #1e1e2e);
+  }
+  .table-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color);
+  }
+  .fk-badge {
+    background: #313244;
+    color: #a6adc8;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+
+  /* ── Column rows ────────────────────────────────────────────────── */
+  .col-row {
+    padding: 2px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    min-height: 22px;
+    transition: background 0.15s;
+    position: relative;
+  }
+  .col-row.pk-row {
+    background: rgba(249, 226, 175, 0.06);
+  }
+  .col-row.fk-row {
+    cursor: pointer;
+  }
+  .col-row.fk-row:hover {
+    background: rgba(137, 180, 250, 0.12);
+  }
+  .col-row.audit-row {
+    opacity: 0.45;
+    min-height: 18px;
+  }
+  .col-row.col-highlighted {
+    background: rgba(249, 226, 175, 0.22) !important;
+    opacity: 1 !important;
+  }
+  .col-row.fk-col-highlighted {
+    background: rgba(137, 180, 250, 0.25) !important;
+    opacity: 1 !important;
+  }
+
+  .badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 0px 4px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    line-height: 14px;
+  }
+  .badge.pk { background: #f9e2af; color: #1e1e2e; }
+  .badge.fk { background: #89b4fa; color: #1e1e2e; }
+
+  .col-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .col-row.fk-row .col-name { color: #89b4fa; }
+  .col-row.pk-row .col-name { color: #f9e2af; }
+  .col-row.audit-row .col-name { color: #585b70; }
+
+  .col-type {
+    color: #6c7086;
+    font-size: 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* ── Tooltip ────────────────────────────────────────────────────── */
+  #tooltip {
+    position: fixed;
+    background: #181825;
+    border: 1px solid #45475a;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 11px;
+    color: #cdd6f4;
+    pointer-events: none;
+    z-index: 200;
+    max-width: 340px;
+    line-height: 1.6;
+    display: none;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  }
+  #tooltip .tt-title {
+    font-weight: 700;
+    font-size: 12px;
+    margin-bottom: 4px;
+    color: #cdd6f4;
+  }
+  #tooltip .tt-item {
+    color: #a6adc8;
+    font-size: 10.5px;
+  }
+  #tooltip .tt-arrow { color: #89b4fa; }
+  #tooltip .tt-out { color: #f38ba8; }
+  #tooltip .tt-in { color: #a6e3a1; }
+  .tt-col   { font-family: monospace; color: #89b4fa; font-size: 12px; margin-bottom: 4px; }
+  .tt-desc  { color: #cdd6f4; font-size: 11px; margin: 4px 0 6px; line-height: 1.5; }
+  .tt-section { color: #6c7086; font-size: 10px; font-weight: 600; text-transform: uppercase; margin: 6px 0 2px; letter-spacing: 0.05em; }
+  .tt-enums { color: #f9e2af; font-size: 10px; font-family: monospace; }
+
+  /* SQL Query Panel */
+  #query-panel {
+    position: fixed; top: 50px; right: -420px; width: 420px;
+    bottom: 0; background: #181825; border-left: 1px solid #313244;
+    z-index: 90; transition: right 0.3s ease; display: flex; flex-direction: column;
+  }
+  #query-panel.open { right: 0; }
+  #query-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid #313244;
+    font-size: 13px; font-weight: 600; color: #cdd6f4; flex-shrink: 0;
+  }
+  #query-panel-close {
+    background: none; border: none; color: #6c7086; cursor: pointer;
+    font-size: 16px; padding: 2px 6px; border-radius: 4px;
+  }
+  #query-panel-close:hover { background: #313244; color: #cdd6f4; }
+  #query-panel-body { flex: 1; overflow-y: auto; padding: 12px; }
+  #query-category-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .qcat-btn {
+    padding: 3px 10px; border-radius: 4px; border: 1px solid #313244;
+    background: #1e1e2e; color: #a6adc8; font-size: 11px; cursor: pointer;
+  }
+  .qcat-btn.active { background: #313244; color: #cdd6f4; border-color: #45475a; }
+  .query-item {
+    background: #1e1e2e; border: 1px solid #313244; border-radius: 6px;
+    margin-bottom: 10px; overflow: hidden;
+  }
+  .query-item-header {
+    padding: 8px 12px; font-size: 11px; font-weight: 600;
+    color: #a6e3a1; cursor: pointer; display: flex; justify-content: space-between;
+    align-items: center;
+  }
+  .query-item-header:hover { background: #252535; }
+  .query-item-body { display: none; padding: 0; }
+  .query-item-body.open { display: block; }
+  .query-item pre {
+    margin: 0; padding: 12px; font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 10.5px; color: #cdd6f4; overflow-x: auto; white-space: pre;
+    background: #11111b; border-top: 1px solid #313244; line-height: 1.6;
+  }
+  .copy-btn {
+    font-size: 10px; padding: 2px 8px; background: #313244;
+    border: none; border-radius: 3px; color: #a6adc8; cursor: pointer;
+  }
+  .copy-btn:hover { background: #45475a; color: #cdd6f4; }
+  #query-panel-btn {
+    position: fixed; top: 12px; right: 16px; z-index: 110;
+    padding: 5px 12px; background: #313244; border: 1px solid #45475a;
+    border-radius: 5px; color: #a6e3a1; font-size: 11px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  #query-panel-btn:hover { background: #45475a; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Database ERD</h1>
+  <button id="query-panel-btn" onclick="toggleQueryPanel()">📋 SQL 쿼리</button>
+</div>
+
+<!-- SQL Query Panel -->
+<div id="query-panel">
+  <div id="query-panel-header">
+    <span>📋 SQL Query Reference</span>
+    <button id="query-panel-close" onclick="toggleQueryPanel()">✕</button>
+  </div>
+  <div id="query-panel-body">
+    <div id="query-category-tabs"></div>
+    <div id="query-list"></div>
+  </div>
+</div>
+
+<div id="canvas-wrap">
+  <div id="canvas">
+    <svg id="svg-overlay"><defs></defs></svg>
+  </div>
+</div>
+<div id="tooltip"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// SCHEMA DATA
+// ═══════════════════════════════════════════════════════════════════
+
+const DOMAIN_COLORS = {
+  user:    '#89b4fa',
+  product: '#fab387',
+  sku:     '#f38ba8',
+  order:   '#94e2d5',
+  claim:   '#a6e3a1',
+  delivery:'#f9e2af',
+  payment: '#cba6f7',
+  coupon:  '#f5c2e7',
+  partner: '#a6adc8',
+};
+
+const DOMAIN_ORDER = ['user','product','sku','order','claim','delivery','payment','coupon','partner'];
+
+// Column definition: [name, type, flags]
+// flags: 'PK', 'FK:table.col', 'audit', or ''
+const TABLES = [
+  // ── USER ────────────────────────────────────────────────────────
+  { name: 'users_ro', domain: 'user', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['country','varchar',''],
+    ['member_key','varchar',''],
+    ['status','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+    ['deactivated_at','ts',''],
+  ]},
+  { name: 'user_delivery_address_ro', domain: 'user', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['user_id','bigint','FK:users_ro.id'],
+    ['default_address','bigint',''],
+    ['city','varchar',''],
+    ['country','varchar',''],
+    ['state_or_province','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'user_coupons_ro', domain: 'user', cols: [
+    ['_id','bigint','PK|FK:users_ro.id'],
+    ['coupons','varchar',''],
+  ]},
+  { name: 'user_favorites_ro', domain: 'user', cols: [
+    ['_id','bigint','PK|FK:users_ro.id'],
+    ['artistshopfavorites','varchar',''],
+    ['mallfavorites','varchar',''],
+  ]},
+
+  // ── PRODUCT ─────────────────────────────────────────────────────
+  { name: 'mall_ro', domain: 'product', cols: [
+    ['_id','bigint','PK'],
+    ['bizpartnerid','bigint',''],
+    ['i18n','json',''],
+    ['images','json',''],
+    ['categories','json',''],
+    ['slots','json',''],
+    ['topbanners','json',''],
+    ['urlpath','varchar',''],
+    ['profile','varchar',''],
+    ['ogimage','varchar',''],
+    ['createdat','ts','audit'],
+    ['deletedat','ts','audit'],
+  ]},
+  { name: 'artist_ro', domain: 'product', cols: [
+    ['_id','bigint','PK'],
+    ['bizpartnerid','bigint',''],
+    ['mallid','bigint','FK:mall_ro._id'],
+    ['berrizartistid','bigint',''],
+    ['berrizartistname','varchar',''],
+    ['i18n','json',''],
+    ['createdat','ts','audit'],
+    ['deletedat','ts','audit'],
+  ]},
+  { name: 'artist_shop_ro', domain: 'product', cols: [
+    ['_id','bigint','PK'],
+    ['bizpartnerid','bigint',''],
+    ['mallid','bigint','FK:mall_ro._id'],
+    ['artistids','varchar',''],
+    ['urlpath','varchar',''],
+    ['i18n','json',''],
+    ['display','bool',''],
+    ['keywords','varchar',''],
+    ['slots','json',''],
+    ['topbanners','json',''],
+    ['createdat','ts','audit'],
+    ['deletedat','ts','audit'],
+  ]},
+  { name: 'product_ro', domain: 'product', cols: [
+    ['_id','bigint','PK'],
+    ['artistid','bigint','FK:artist_ro._id'],
+    ['bizpartnerid','bigint',''],
+    ['mallid','bigint','FK:mall_ro._id'],
+    ['i18n','json',''],
+    ['images','json',''],
+    ['items','varchar',''],
+    ['options','json',''],
+    ['price','varchar',''],
+    ['status','varchar',''],
+    ['type','varchar',''],
+    ['saletype','varchar',''],
+    ['adultonly','bool',''],
+    ['couponenabled','bool',''],
+    ['saleperiod','varchar',''],
+    ['displayperiod','varchar',''],
+    ['purchaseconditions','json',''],
+    ['createdat','ts','audit'],
+    ['deletedat','ts','audit'],
+  ]},
+  { name: 'collection_ro', domain: 'product', cols: [
+    ['_id','bigint','PK'],
+    ['bizpartnerid','bigint',''],
+    ['mallid','bigint','FK:mall_ro._id'],
+    ['i18n','json',''],
+    ['products','varchar',''],
+    ['display','bool',''],
+    ['displayperiod','varchar',''],
+    ['urlpath','varchar',''],
+    ['topimage','json',''],
+    ['ogimage','varchar',''],
+    ['createdat','ts','audit'],
+    ['deletedat','ts','audit'],
+  ]},
+  { name: 'platform_category_ro', domain: 'product', cols: [
+    ['_id','bigint','PK'],
+    ['parentid','bigint','FK:platform_category_ro._id'],
+    ['level','bigint',''],
+    ['name','varchar',''],
+    ['policies','varchar',''],
+    ['createdat','ts','audit'],
+  ]},
+  { name: 'product_category_ro', domain: 'product', cols: [
+    ['_id','bigint','PK'],
+    ['name','varchar',''],
+    ['essentialtitles','varchar',''],
+  ]},
+  { name: 'mall_category_product_count_ro', domain: 'product', cols: [
+    ['_id','bigint','PK'],
+    ['artistid','bigint','FK:artist_ro._id'],
+    ['mallcategoryid','bigint',''],
+    ['mallid','bigint','FK:mall_ro._id'],
+    ['productcount','bigint',''],
+    ['createdat','ts','audit'],
+  ]},
+  { name: 'sold_quantity_ro', domain: 'product', cols: [
+    ['_id','bigint','PK'],
+    ['productid','bigint','FK:product_ro._id'],
+    ['quantity','bigint',''],
+  ]},
+  { name: 'notice_ro', domain: 'product', cols: [
+    ['_id','bigint','PK'],
+    ['bizpartnerid','bigint',''],
+    ['i18n','json',''],
+    ['admintitle','varchar',''],
+    ['displaytarget','varchar',''],
+    ['ispinned','bool',''],
+    ['maindisplay','bool',''],
+    ['postdate','varchar',''],
+    ['createdat','ts','audit'],
+    ['deletedat','ts','audit'],
+  ]},
+
+  // ── SKU ─────────────────────────────────────────────────────────
+  { name: 'sku_group_ro', domain: 'sku', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['biz_partner_id','bigint',''],
+    ['code','varchar',''],
+    ['code_name','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'sku_ro', domain: 'sku', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['sku_group_id','bigint','FK:sku_group_ro.id'],
+    ['name','varchar',''],
+    ['sku_code','varchar',''],
+    ['barcode','bigint',''],
+    ['type','varchar',''],
+    ['status','varchar',''],
+    ['composition_type','varchar',''],
+    ['usage_type','varchar',''],
+    ['price_amount','bigint',''],
+    ['currency','varchar',''],
+    ['weight','bigint',''],
+    ['height','bigint',''],
+    ['length','bigint',''],
+    ['width','bigint',''],
+    ['hs_code','bigint',''],
+    ['country_of_origin','varchar',''],
+    ['material_code','varchar',''],
+    ['description','varchar',''],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'bundled_sku_ro', domain: 'sku', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['sku_id','bigint','FK:sku_ro.id'],
+    ['bundled_sku_id','bigint','FK:sku_ro.id'],
+    ['quantity','bigint',''],
+  ]},
+  { name: 'stock_ro', domain: 'sku', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['sku_id','bigint','FK:sku_ro.id'],
+    ['warehouse_id','bigint',''],
+    ['available_quantity','bigint',''],
+    ['reserved_quantity','bigint',''],
+    ['physical_quantity','bigint',''],
+    ['version','bigint',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'stock_usage_ro', domain: 'sku', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['sku_id','bigint','FK:sku_ro.id'],
+    ['stock_id','bigint','FK:stock_ro.id'],
+    ['ref_id','bigint',''],
+    ['ref_type','varchar',''],
+    ['type','varchar',''],
+    ['before_quantity','bigint',''],
+    ['after_quantity','bigint',''],
+    ['delta','bigint',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'adjustment_ro', domain: 'sku', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['warehouse_id','bigint',''],
+    ['sku_id','bigint','FK:sku_ro.id'],
+    ['status','varchar',''],
+    ['type','varchar',''],
+    ['reason','varchar',''],
+    ['adjusted_quantity','bigint',''],
+    ['adjusting_quantity','bigint',''],
+    ['note','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'logistics_sku_mapping_ro', domain: 'sku', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['sku_id','bigint','FK:sku_ro.id'],
+    ['warehouse_id','bigint',''],
+    ['integration_status','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+
+  // ── ORDER ────────────────────────────────────────────────────────
+  { name: 'cart_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['user_id','bigint','FK:users_ro.id'],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'cart_line_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['cart_id','bigint','FK:cart_ro.id'],
+    ['mall_id','bigint','FK:mall_ro._id'],
+    ['product_id','bigint','FK:product_ro._id'],
+    ['product_item_id','bigint',''],
+    ['quantity','bigint',''],
+    ['selected','bigint',''],
+    ['added_at','ts',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'cart_line_item_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['cart_line_id','bigint','FK:cart_line_ro.id'],
+    ['product_option_item_id','bigint',''],
+    ['value','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'checkout_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['user_id','bigint','FK:users_ro.id'],
+    ['checkout_data','json',''],
+    ['currency','varchar',''],
+    ['exchange_rates','varchar',''],
+    ['receiving_type','varchar',''],
+    ['source_type','varchar',''],
+    ['status','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'preemptive_sale_stock_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['checkout_id','bigint','FK:checkout_ro.id'],
+    ['product_id','bigint','FK:product_ro._id'],
+    ['product_item_id','bigint',''],
+    ['quantity','bigint',''],
+    ['status','varchar',''],
+    ['expiration_time','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'orders_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['checkout_id','bigint','FK:checkout_ro.id'],
+    ['user_id','bigint','FK:users_ro.id'],
+    ['payment_amount','double',''],
+    ['base_currency_payment_amount','bigint',''],
+    ['payment_currency','varchar',''],
+    ['base_currency','varchar',''],
+    ['exchange_rates','varchar',''],
+    ['status','varchar',''],
+    ['device','varchar',''],
+    ['user_agent','varchar',''],
+    ['completed_at','ts',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'order_failure_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['order_id','bigint','FK:orders_ro.id'],
+    ['error_code','varchar',''],
+    ['message','varchar',''],
+    ['cause_type','varchar',''],
+    ['step','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'order_bundle_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['order_id','bigint','FK:orders_ro.id'],
+    ['biz_partner_id','bigint',''],
+    ['shipping_warehouse_id','bigint',''],
+    ['pickup_warehouse_id','varchar',''],
+    ['bundle_delivery_group_id','bigint',''],
+    ['delivery_fee','bigint',''],
+    ['delivery_fee_currency','varchar',''],
+    ['delivery_method','varchar',''],
+    ['receiving_type','varchar',''],
+    ['area_type','varchar',''],
+    ['base_currency','varchar',''],
+    ['receiver_country','varchar',''],
+    ['receiver_city','varchar',''],
+    ['receiver_state_or_province','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'order_product_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['artist_id','bigint','FK:artist_ro._id'],
+    ['biz_partner_id','bigint',''],
+    ['commission_id','bigint','FK:commission_ro.id'],
+    ['mall_id','bigint','FK:mall_ro._id'],
+    ['product_id','bigint','FK:product_ro._id'],
+    ['product_name','varchar',''],
+    ['artist_name','varchar',''],
+    ['mall_name','varchar',''],
+    ['sale_price_order_payment_amount','double',''],
+    ['order_payment_currency','varchar',''],
+    ['product_type','varchar',''],
+    ['product_sale_type','varchar',''],
+    ['is_chart_target','bigint',''],
+  ]},
+  { name: 'order_line_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['order_bundle_id','bigint','FK:order_bundle_ro.id'],
+    ['order_id','bigint','FK:orders_ro.id'],
+    ['order_product_id','bigint','FK:order_product_ro.id'],
+    ['product_item_id','bigint',''],
+    ['sku_id','bigint','FK:sku_ro.id'],
+    ['amount','double',''],
+    ['base_currency_amount','bigint',''],
+    ['quantity','bigint',''],
+    ['status','varchar',''],
+    ['base_currency','varchar',''],
+    ['product_item_type','varchar',''],
+    ['confirmed_at','ts',''],
+    ['canceled_at','ts',''],
+    ['approved_at','ts',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'order_line_item_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['order_line_id','bigint','FK:order_line_ro.id'],
+    ['product_option_item_id','bigint',''],
+    ['option_name','varchar',''],
+    ['option_value','varchar',''],
+    ['option_type','varchar',''],
+    ['select_option_type','varchar',''],
+    ['display_order','bigint',''],
+    ['required','bigint',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'purchased_quantity_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['order_id','bigint','FK:orders_ro.id'],
+    ['order_line_id','bigint','FK:order_line_ro.id'],
+    ['product_id','bigint','FK:product_ro._id'],
+    ['product_item_id','bigint',''],
+    ['user_id','bigint','FK:users_ro.id'],
+    ['ordered_quantity','bigint',''],
+    ['canceled_quantity','bigint',''],
+    ['version','bigint',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'order_coupon_discount_ro', domain: 'order', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['coupon_id','bigint','FK:coupon_ro._id'],
+    ['coupon_policy_id','bigint','FK:coupon_policy_ro._id'],
+    ['order_line_id','bigint','FK:order_line_ro.id'],
+    ['applied_discount_amount','double',''],
+    ['base_currency_applied_discount_amount','bigint',''],
+    ['discount_amount','bigint',''],
+    ['discount_rate','bigint',''],
+    ['max_discount_amount','bigint',''],
+    ['min_applicable_price','bigint',''],
+    ['applied_currency','varchar',''],
+    ['base_currency','varchar',''],
+    ['i18n','json',''],
+    ['benefit_type','varchar',''],
+    ['coupon_type','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+
+  // ── CLAIM ────────────────────────────────────────────────────────
+  { name: 'claim_ro', domain: 'claim', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['order_id','bigint','FK:orders_ro.id'],
+    ['user_id','bigint','FK:users_ro.id'],
+    ['refund_context_id','bigint',''],
+    ['claim_type','varchar',''],
+    ['claim_reason','varchar',''],
+    ['status','varchar',''],
+    ['product_disposition_method','varchar',''],
+    ['creation_description','varchar',''],
+    ['description','varchar',''],
+    ['refund_amount','bigint',''],
+    ['refund_currency','varchar',''],
+    ['completed_at','ts',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'claim_line_ro', domain: 'claim', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['claim_id','bigint','FK:claim_ro.id'],
+    ['order_bundle_id','bigint','FK:order_bundle_ro.id'],
+    ['order_line_id','bigint','FK:order_line_ro.id'],
+    ['sku_id','bigint','FK:sku_ro.id'],
+    ['type','varchar',''],
+    ['parts_name','varchar',''],
+    ['quantity','bigint',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'claim_delivery_fee_ro', domain: 'claim', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['claim_id','bigint','FK:claim_ro.id'],
+    ['order_bundle_id','bigint','FK:order_bundle_ro.id'],
+    ['refunded_delivery_fee','bigint',''],
+    ['return_delivery_fee','bigint',''],
+    ['currency','varchar',''],
+  ]},
+  { name: 'claim_order_coupon_ro', domain: 'claim', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['claim_id','bigint','FK:claim_ro.id'],
+    ['coupon_id','bigint','FK:coupon_ro._id'],
+    ['order_line_id','bigint','FK:order_line_ro.id'],
+    ['cancel_amount','double',''],
+    ['cancel_currency','varchar',''],
+    ['coupon_type','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+
+  // ── DELIVERY ─────────────────────────────────────────────────────
+  { name: 'delivery_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['order_id','bigint','FK:orders_ro.id'],
+    ['biz_partner_id','bigint',''],
+    ['warehouse_id','bigint',''],
+    ['origin_delivery_id','varchar','FK:delivery_ro.id'],
+    ['outgoing_id','bigint','FK:outgoing_ro.id'],
+    ['incoming_id','bigint','FK:incoming_ro.id'],
+    ['type','varchar',''],
+    ['status','varchar',''],
+    ['method','varchar',''],
+    ['region','varchar',''],
+    ['ref_type','varchar',''],
+    ['ref_id','bigint',''],
+    ['receiver_country','varchar',''],
+    ['receiver_city','varchar',''],
+    ['receiver_state_or_province','varchar',''],
+    ['started_at','ts',''],
+    ['completed_at','ts',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'delivery_item_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['delivery_id','varchar','FK:delivery_ro.id'],
+    ['sku_id','bigint','FK:sku_ro.id'],
+    ['product_id','bigint','FK:product_ro._id'],
+    ['ref_id','bigint',''],
+    ['ref_type','varchar',''],
+    ['quantity','bigint',''],
+    ['item_info','json',''],
+    ['pre_sale_deliver_start','varchar',''],
+    ['pre_sale_deliver_end','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'outgoing_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['order_id','bigint','FK:orders_ro.id'],
+    ['warehouse_id','bigint',''],
+    ['biz_partner_id','bigint',''],
+    ['origin_outgoing_id','varchar','FK:outgoing_ro.id'],
+    ['shipping_id','bigint',''],
+    ['status','varchar',''],
+    ['type','varchar',''],
+    ['method','varchar',''],
+    ['fulfillment_type','varchar',''],
+    ['ref_type','varchar',''],
+    ['ref_id','bigint',''],
+    ['receiver_name','varchar',''],
+    ['receiver_country','varchar',''],
+    ['receiver_city','varchar',''],
+    ['receiver_addr','varchar',''],
+    ['receiver_detail_addr','varchar',''],
+    ['receiver_zipcode','varchar',''],
+    ['receiver_state_or_province','varchar',''],
+    ['receiver_phone_number','varchar',''],
+    ['receiver_tin','varchar',''],
+    ['buyer_name','varchar',''],
+    ['buyer_phone_number','varchar',''],
+    ['buyer_email','varchar',''],
+    ['requested_at','ts',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'outgoing_item_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['outgoing_id','bigint','FK:outgoing_ro.id'],
+    ['sku_id','bigint','FK:sku_ro.id'],
+    ['product_id','bigint','FK:product_ro._id'],
+    ['parent_item_id','varchar','FK:outgoing_item_ro.id'],
+    ['ref_id','bigint',''],
+    ['ref_type','varchar',''],
+    ['sale_type','varchar',''],
+    ['quantity','bigint',''],
+    ['outgoing_quantity','bigint',''],
+    ['expected_start_date_time','ts',''],
+    ['expected_end_date_time','ts',''],
+  ]},
+  { name: 'incoming_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['claim_id','bigint','FK:claim_ro.id'],
+    ['warehouse_id','bigint',''],
+    ['delivery_id','varchar','FK:delivery_ro.id'],
+    ['origin_delivery_id','varchar','FK:delivery_ro.id'],
+    ['origin_outgoing_id','varchar','FK:outgoing_ro.id'],
+    ['origin_incoming_id','varchar','FK:incoming_ro.id'],
+    ['biz_partner_id','bigint',''],
+    ['type','varchar',''],
+    ['status','varchar',''],
+    ['transport_type','varchar',''],
+    ['ref_type','varchar',''],
+    ['ref_id','bigint',''],
+    ['external_ref_id','varchar',''],
+    ['note','varchar',''],
+    ['completed_at','ts',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'incoming_item_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['incoming_id','bigint','FK:incoming_ro.id'],
+    ['sku_id','bigint','FK:sku_ro.id'],
+    ['requested_quantity','bigint',''],
+    ['incoming_quantity','bigint',''],
+    ['damaged_quantity','bigint',''],
+    ['missing_quantity','bigint',''],
+    ['purchase_price','bigint',''],
+    ['purchase_currency','varchar',''],
+    ['sale_type','varchar',''],
+    ['memo','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'pickup_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['order_id','bigint','FK:orders_ro.id'],
+    ['outgoing_id','bigint','FK:outgoing_ro.id'],
+    ['sku_id','bigint','FK:sku_ro.id'],
+    ['warehouse_id','bigint',''],
+    ['biz_partner_id','bigint',''],
+    ['ref_id','bigint',''],
+    ['ref_type','varchar',''],
+    ['item_ref_id','bigint',''],
+    ['item_ref_type','varchar',''],
+    ['status','varchar',''],
+    ['quantity','bigint',''],
+    ['pickup_date_time','ts',''],
+    ['picked_up_at','ts',''],
+    ['completed_at','ts',''],
+    ['signature_path','varchar',''],
+    ['version','bigint',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'location_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['biz_partner_id','bigint',''],
+    ['ref_id','bigint',''],
+    ['ref_type','varchar',''],
+    ['pickup_method','varchar',''],
+    ['operating_start_at','ts',''],
+    ['operating_end_at','ts',''],
+  ]},
+  { name: 'international_delivery_fee_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['fee','bigint',''],
+    ['min_weight','double',''],
+    ['zone_code','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'international_dim_factor_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['dim_factor','bigint',''],
+    ['zone_code','varchar',''],
+  ]},
+  { name: 'zone_country_mapping_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['country','varchar',''],
+    ['zone_code','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'remote_area_ro', domain: 'delivery', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['address','varchar',''],
+    ['delivery_company','varchar',''],
+    ['type','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+
+  // ── PAYMENT ──────────────────────────────────────────────────────
+  { name: 'pg_ro', domain: 'payment', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['name','varchar',''],
+    ['code','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'payment_method_ro', domain: 'payment', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['name','varchar',''],
+    ['code','varchar',''],
+    ['region_type','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'pg_payment_method_ro', domain: 'payment', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['commission_id','bigint','FK:commission_ro.id'],
+    ['code','varchar',''],
+    ['name','varchar',''],
+    ['code_type','varchar',''],
+    ['payment_method_code','varchar',''],
+    ['pg_code','varchar',''],
+    ['enabled','bigint',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'commission_ro', domain: 'payment', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['pg_payment_method_id','bigint','FK:pg_payment_method_ro.id'],
+    ['commission','varchar',''],
+    ['commission_type','varchar',''],
+    ['status','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'pg_currency_ro', domain: 'payment', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['pg_payment_method_id','bigint','FK:pg_payment_method_ro.id'],
+    ['currency','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'payment_ro', domain: 'payment', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['user_id','bigint','FK:users_ro.id'],
+    ['payment_detail_id','bigint','FK:payment_detail_ro.id'],
+    ['ref_id','bigint',''],
+    ['ref_type','varchar',''],
+    ['amount','double',''],
+    ['canceled_amount','bigint',''],
+    ['commission','varchar',''],
+    ['payment_vat','bigint',''],
+    ['pg_transaction_id','varchar',''],
+    ['payment_method','varchar',''],
+    ['pg_code','varchar',''],
+    ['status','varchar',''],
+    ['requested_currency','varchar',''],
+    ['commission_type','varchar',''],
+    ['member_key','varchar',''],
+    ['mid','varchar',''],
+    ['completed_at','ts',''],
+    ['requested_at','ts',''],
+    ['latest_canceled_at','ts',''],
+    ['expire_at','varchar',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'payment_detail_ro', domain: 'payment', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['payment_id','bigint','FK:payment_ro.id'],
+    ['bank_code','varchar',''],
+    ['bank_name','varchar',''],
+    ['pg_payment_method_code','varchar',''],
+    ['pg_payment_method_name','varchar',''],
+    ['card_code','bigint',''],
+    ['card_installment','bigint',''],
+    ['approval_amount','bigint',''],
+    ['approval_currency','varchar',''],
+    ['approval_rate','double',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'payment_cancel_ro', domain: 'payment', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['claim_id','bigint','FK:claim_ro.id'],
+    ['payment_id','bigint','FK:payment_ro.id'],
+    ['amount','double',''],
+    ['currency','varchar',''],
+    ['pg_cancel_id','varchar',''],
+    ['canceled_at','ts',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+    ['deleted_at','varchar','audit'],
+  ]},
+  { name: 'exchange_rate_ro', domain: 'payment', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['base','varchar',''],
+    ['counter','varchar',''],
+    ['exchange_rate','double',''],
+    ['base_unit','bigint',''],
+    ['notified_at','ts',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+
+  // ── COUPON ───────────────────────────────────────────────────────
+  { name: 'coupon_policy_ro', domain: 'coupon', cols: [
+    ['_id','bigint','PK'],
+    ['createdat','ts','audit'],
+    ['deletedat','ts','audit'],
+    ['discountpolicy','json',''],
+    ['issuancepolicy','varchar',''],
+    ['operationpolicy','varchar',''],
+    ['redeempolicy','varchar',''],
+    ['targetpolicy','varchar',''],
+  ]},
+  { name: 'coupon_ro', domain: 'coupon', cols: [
+    ['_id','bigint','PK'],
+    ['couponpolicyid','bigint','FK:coupon_policy_ro._id'],
+    ['userid','bigint','FK:users_ro.id'],
+    ['status','varchar',''],
+    ['issuedby','varchar',''],
+    ['redeemedinfo','json',''],
+    ['activatedat','ts',''],
+    ['expiredat','ts',''],
+    ['issuedat','varchar',''],
+  ]},
+
+  // ── PARTNER ──────────────────────────────────────────────────────
+  { name: 'biz_partner_policy_ro', domain: 'partner', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['biz_partner_id','bigint',''],
+    ['auto_order_approval','bigint',''],
+    ['auto_order_approval_hour','varchar',''],
+    ['delivery_fee','bigint',''],
+    ['delivery_fee_currency','varchar',''],
+    ['conditional_free_threshold','bigint',''],
+    ['return_fee','bigint',''],
+    ['jeju_additional_amount','bigint',''],
+    ['remote_area_additional_amount','bigint',''],
+    ['created_ip','varchar','audit'],
+    ['updated_ip','varchar','audit'],
+  ]},
+  { name: 'contract_ro', domain: 'partner', cols: [
+    ['_id','bigint','PK'],
+    ['bizpartnerid','bigint',''],
+    ['parentid','bigint','FK:contract_ro._id'],
+    ['labelref','varchar',''],
+    ['businessmodelref','varchar',''],
+    ['contractname','varchar',''],
+    ['code','varchar',''],
+    ['contracttype','varchar',''],
+    ['businessmodeltype','varchar',''],
+    ['labeltype','varchar',''],
+    ['regiontype','varchar',''],
+    ['status','varchar',''],
+    ['artists','varchar',''],
+    ['commissions','varchar',''],
+    ['contractperiod','varchar',''],
+    ['ipdomains','varchar',''],
+    ['attachmentpaths','varchar',''],
+    ['contractsignedat','varchar',''],
+    ['renewalnotificationdate','varchar',''],
+    ['createdat','ts','audit'],
+    ['deletedat','ts','audit'],
+  ]},
+  { name: 'contract_project_ro', domain: 'partner', cols: [
+    ['_id','bigint','PK'],
+    ['bizpartnerid','bigint',''],
+    ['name','varchar',''],
+    ['status','varchar',''],
+    ['subprojects','varchar',''],
+    ['createdat','ts','audit'],
+    ['deletedat','ts','audit'],
+  ]},
+  { name: 'sale_country_ro', domain: 'partner', cols: [
+    ['id','bigint','PK'],
+    ['created_at','ts','audit'],
+    ['updated_at','ts','audit'],
+    ['country','varchar',''],
+    ['currency','varchar',''],
+    ['name','varchar',''],
+    ['language','varchar',''],
+  ]},
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// COLUMN DESCRIPTIONS (from sampleDB.sql comments)
+// ═══════════════════════════════════════════════════════════════════
+const COL_DESCS = {
+  adjustment_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    warehouse_id:'warehouse 참조 ID (FK)',
+    status:'상태값',
+    sku_id:'sku 참조 ID (FK)',
+    type:'유형 구분',
+    reason:'Enum: ADJUSTMENT, DAMAGED, DISCREPANCY, ETC, TAKING'
+  },
+  artist_ro: {
+    _id:'식별자 (PK)',
+    berrizartistname:'Enum: GIRLS\' GENERATION, KiiiKiii, TVXQ!, WayV, 최유리',
+    i18n:'JSON 형식 데이터'
+  },
+  artist_shop_ro: {
+    _id:'식별자 (PK)',
+    berrizcommunitykey:'Enum: monstax, nowz, woodz',
+    display:'Enum: false, true',
+    displayberrizcommunitylinkbutton:'Enum: false, true',
+    i18n:'JSON 형식 데이터',
+    keywords:'Enum: [\'ATEEZ\', \'에이티즈\'], [\'KANGTA\'], [\'NCT DREAM\'], [\'NOWZ\', \'나우즈\'], [\'몬엑\', \'몬엑샵\', \'Monx샵\', \'Monx\', \'몬베베샵\'], []',
+    slots:'JSON 형식 데이터',
+    topbanners:'JSON 형식 데이터',
+    berrizcommunityid:'Enum: 10, 14, 4',
+    displayedat:'Enum: 2026-01-13 00:34:12.405, 2026-01-16 02:18:33.255, 2026-03-10 23:31:58.976, 2026-03-13 03:35:42.761, 2026-04-03 04:01:05.821, 2026-04-03 08:24:35.443 (nullable)',
+    ogimage:'Enum: artist_shop/189371993905856/217528888063872.png, artist_shop/204678318532352/227449241090624.png, artist_shop/208216825921792/217383414201344.png, artist_shop/228523883594944/228523366278336.png, artist_shop/313154016138560/313783657998208.jpg'
+  },
+  biz_partner_policy_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    biz_partner_id:'biz_partner 참조 ID (FK)'
+  },
+  bundled_sku_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    sku_id:'sku 참조 ID (FK)',
+    bundled_sku_id:'bundled_sku 참조 ID (FK)',
+    quantity:'수량'
+  },
+  cart_line_item_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    cart_line_id:'cart_line 참조 ID (FK)',
+    product_option_item_id:'product_option_item 참조 ID (FK)',
+    value:'Enum:  b, Cx, Ddd, Df, ㅂㅈ, ㅎㅎ (nullable)'
+  },
+  cart_line_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    cart_id:'cart 참조 ID (FK)',
+    mall_id:'mall 참조 ID (FK)',
+    product_id:'product 참조 ID (FK)',
+    product_item_id:'product_item 참조 ID (FK)',
+    quantity:'수량',
+    selected:'Enum: 0, 1'
+  },
+  cart_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    user_id:'user 참조 ID (FK)'
+  },
+  checkout_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    user_id:'user 참조 ID (FK)',
+    checkout_data:'JSON 형식 데이터',
+    currency:'통화 코드',
+    exchange_rates:'Enum: 100JPY/KRW=880.0000000000;KRW/JPY=0.1136363636;KRW/KRW=1.0000000000, KRW/KRW=1.0000000000, KRW/KRW=1.0000000000;KRW/USD=0.0007407407;USD/KRW=1350.0000000000',
+    receiving_type:'Enum: DELIVERY, NONE',
+    source_type:'Enum: CART, PRODUCT_DETAIL',
+    status:'상태값',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  claim_delivery_fee_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    claim_id:'claim 참조 ID (FK)',
+    order_bundle_id:'order_bundle 참조 ID (FK)',
+    currency:'통화 코드'
+  },
+  claim_line_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    claim_id:'claim 참조 ID (FK)',
+    order_bundle_id:'order_bundle 참조 ID (FK)',
+    order_line_id:'order_line 참조 ID (FK)',
+    sku_id:'sku 참조 ID (FK)',
+    quantity:'수량',
+    type:'유형 구분'
+  },
+  claim_order_coupon_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    claim_id:'claim 참조 ID (FK)',
+    coupon_id:'coupon 참조 ID (FK)',
+    cancel_currency:'Enum: KRW, USD',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)',
+    order_line_id:'order_line 참조 ID (FK)'
+  },
+  claim_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    order_id:'order 참조 ID (FK)',
+    claim_reason:'Enum: BUYER, SELLER',
+    claim_type:'Enum: CANCEL, EXCHANGE',
+    product_disposition_method:'Enum: DISPOSE, NONE_DELIVERY',
+    status:'상태값',
+    creation_description:'Enum: Selected the wrong option, 临时改变主意, 단순 변심, 몬스터X 키트 팬클럽 카드 불량 - 카드 재배송 필요, 미수령 취소, 옵션 잘못 선택',
+    description:'Enum: Selected the wrong option, 临时改变主意, 단순 변심, 몬스타엑스 자동 재배송 요청, 미수령 취소, 옵션 잘못 선택 (nullable)',
+    refund_amount:'(nullable)',
+    refund_currency:'Enum: JPY, KRW (nullable)',
+    user_id:'user 참조 ID (FK)',
+    refund_context_id:'refund_context 참조 ID (FK)'
+  },
+  collection_ro: {
+    _id:'식별자 (PK)',
+    displayperiod:'Enum: [253402300799000, 1770191760000], [253402300799000, 1771897800000], [253402300799000, 1773023400000]',
+    i18n:'JSON 형식 데이터',
+    topimage:'JSON 형식 데이터',
+    urlpath:'Enum: axzkga44ll, frequency, vl5cedj532, wayvwinterspecialalbum, z03iloy6mi'
+  },
+  commission_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    pg_payment_method_id:'pg_payment_method 참조 ID (FK)',
+    commission:'Enum: 0.000, 2.050, 2.200, 3.000',
+    status:'상태값',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  contract_project_ro: {
+    _id:'식별자 (PK)',
+    name:'Enum: 22_데뷔기념MD, 25_ae_라이선스MD, 25_시즌그리팅_기획MD, 25_예성_콘서트MD, 26_NJ_앨범MD',
+    status:'상태값'
+  },
+  contract_ro: {
+    _id:'식별자 (PK)',
+    status:'상태값'
+  },
+  coupon_policy_ro: {
+    _id:'식별자 (PK)',
+    discountpolicy:'JSON 형식 데이터'
+  },
+  coupon_ro: {
+    _id:'식별자 (PK)',
+    activatedat:'Enum: 2025-12-23 01:00:00.000, 2026-01-23 06:00:00.000, 2026-02-09 06:00:00.000, 2026-03-02 01:00:00.000, 2026-03-20 01:00:00.000',
+    expiredat:'Enum: 2026-01-31 14:59:59.000, 2026-02-01 14:59:59.000, 2026-02-28 14:59:59.000, 2026-03-31 14:59:59.000, 2026-04-30 14:59:59.000',
+    status:'상태값',
+    redeemedinfo:'JSON 형식 데이터'
+  },
+  delivery_item_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    delivery_id:'delivery 참조 ID (FK)',
+    sku_id:'sku 참조 ID (FK)',
+    quantity:'수량',
+    ref_id:'ref 참조 ID (FK)',
+    item_info:'JSON 형식 데이터',
+    product_id:'product 참조 ID (FK)',
+    pre_sale_deliver_start:'Enum: 2025-12-26, 2026-01-30, 2026-02-20, 2026-03-11, 2026-03-20, 2026-03-23',
+    pre_sale_deliver_end:'Enum: 2026-01-02, 2026-02-05, 2026-02-25, 2026-03-16, 2026-03-31, 2026-04-07'
+  },
+  delivery_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    type:'유형 구분',
+    origin_delivery_id:'origin_delivery 참조 ID (FK)',
+    status:'상태값',
+    started_at:'(nullable)',
+    completed_at:'(nullable)',
+    region:'Enum: DOMESTIC, OVERSEAS',
+    biz_partner_id:'biz_partner 참조 ID (FK)',
+    receiver_city:'Enum: Tokyo, Yamanashi shi',
+    receiver_country:'Enum: JP, KR',
+    receiver_state_or_province:'Enum: Japan, Yamanashi',
+    order_id:'order 참조 ID (FK)',
+    ref_id:'ref 참조 ID (FK)',
+    warehouse_id:'warehouse 참조 ID (FK)',
+    pre_sale_deliver_start:'Enum: 2025-08-22, 2026-01-01, 2026-03-31, 2026-04-01',
+    pre_sale_deliver_end:'Enum: 2025-08-29, 2026-04-07, 2026-04-30, 2026-05-31',
+    version:'Enum: 0, 1, 2, 3',
+    outgoing_id:'outgoing 참조 ID (FK)',
+    incoming_id:'incoming 참조 ID (FK)',
+    order_snapshot:'JSON 형식 데이터'
+  },
+  exchange_rate_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    base_unit:'Enum: 1, 100',
+    base:'Enum: CAD, IDR, JPY, KRW, USD',
+    counter:'Enum: KRW, MOP, NZD, TRY, TWD, USD'
+  },
+  incoming_item_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    incoming_id:'incoming 참조 ID (FK)',
+    sku_id:'sku 참조 ID (FK)',
+    damaged_quantity:'(nullable)',
+    incoming_quantity:'(nullable)',
+    missing_quantity:'Enum: 0, 1 (nullable)',
+    memo:'Enum: 12/05  LDG -> 베리즈 입고, 2/21-22 H2H 팬미팅MD 현장수령',
+    ref_type:'Enum: CLAIM_LINE, NONE',
+    ref_id:'ref 참조 ID (FK)'
+  },
+  incoming_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    claim_id:'claim 참조 ID (FK)',
+    origin_delivery_id:'origin_delivery 참조 ID (FK)',
+    warehouse_id:'warehouse 참조 ID (FK)',
+    status:'상태값',
+    type:'유형 구분',
+    delivery_id:'delivery 참조 ID (FK)',
+    ref_id:'ref 참조 ID (FK)',
+    external_ref_id:'external_ref 참조 ID (FK)',
+    biz_partner_id:'biz_partner 참조 ID (FK)',
+    origin_outgoing_id:'origin_outgoing 참조 ID (FK)',
+    origin_incoming_id:'origin_incoming 참조 ID (FK)'
+  },
+  international_delivery_fee_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    zone_code:'Enum: A, H, J, P, Q, X'
+  },
+  international_dim_factor_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시'
+  },
+  location_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    biz_partner_id:'biz_partner 참조 ID (FK)',
+    ref_id:'ref 참조 ID (FK)',
+    pickup_method:'Enum: BUTTON, SIGN'
+  },
+  logistics_sku_mapping_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    sku_id:'sku 참조 ID (FK)',
+    warehouse_id:'warehouse 참조 ID (FK)'
+  },
+  mall_category_product_count_ro: {
+    _id:'식별자 (PK)',
+    productcount:'Enum: 0, 1, 12, 17, 2, 3'
+  },
+  mall_ro: {
+    _id:'식별자 (PK)',
+    categories:'JSON 형식 데이터',
+    display:'Enum: false, true',
+    i18n:'JSON 형식 데이터',
+    images:'JSON 형식 데이터',
+    slots:'JSON 형식 데이터',
+    topbanners:'JSON 형식 데이터',
+    profile:'Enum: cbt, prod',
+    ogimage:'Enum: mall/172845827655104/228204661529792.png, mall/189323979571392/207454773567360.png, mall/228522710869184/228522652271808.png, mall/281890899123200/282546559231616.jpeg, mall/286978355384384/296275569005376.png, mall/313761238540416/316476036235136.jpg (nullable)'
+  },
+  notice_ro: {
+    _id:'식별자 (PK)',
+    admintitle:'Enum: 2025 정승환의 안녕, 겨울 : 사랑이라 불린 OFFICIAL MD 판매 안내, 공지입니다., 제이스 공지입니다. 35, 제이스 공지입니다. 39, 테스트샵홈공지#25',
+    bizpartnerid:'Enum: 3, 5 (nullable)',
+    deletedat:'(nullable)',
+    displaytarget:'Enum: [\'ARTIST_SHOP\', 139766400628485], [\'ARTIST_SHOP\', 184830871949440], [\'ARTIST_SHOP\', 189801601228288], [\'HOME\', None]',
+    i18n:'JSON 형식 데이터',
+    postdate:'Enum: 2025-09-25 00:29:22.922, 2025-09-26 07:45:25.436, 2025-09-26 07:47:01.209, 2025-10-14 03:40:35.719, 2025-12-19 01:00:00.000'
+  },
+  order_bundle_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    biz_partner_id:'biz_partner 참조 ID (FK)',
+    bundle_delivery_group_id:'bundle_delivery_group 참조 ID (FK)',
+    order_id:'order 참조 ID (FK)',
+    shipping_warehouse_id:'shipping_warehouse 참조 ID (FK)',
+    delivery_fee_currency:'Enum: JPY, KRW, USD',
+    receiving_type:'Enum: DELIVERY, NONE',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)',
+    pickup_warehouse_id:'pickup_warehouse 참조 ID (FK)'
+  },
+  order_coupon_discount_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    coupon_id:'coupon 참조 ID (FK)',
+    coupon_policy_id:'coupon_policy 참조 ID (FK)',
+    order_line_id:'order_line 참조 ID (FK)',
+    discount_rate:'Enum: 10.000, 5.000 (nullable)',
+    max_discount_amount:'(nullable)',
+    applied_currency:'Enum: KRW, USD',
+    i18n:'JSON 형식 데이터',
+    benefit_type:'Enum: FIXED_AMOUNT_DISCOUNT, FIXED_RATE_DISCOUNT',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  order_failure_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    order_id:'order 참조 ID (FK)',
+    error_code:'Enum: CAN_NOT_CANCEL_ORDER, PAYMENT_PG_COMPLETE_FAILED',
+    cause_type:'Enum: DOMAIN_ERROR, PG_ERROR',
+    step:'Enum: CANCEL, ORDER',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  order_line_item_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    order_line_id:'order_line 참조 ID (FK)',
+    product_option_item_id:'product_option_item 참조 ID (FK)',
+    display_order:'Enum: 0, 1',
+    option_name:'Enum: CELEB, Member, Option, Pick-up Time, 사이즈',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)',
+    select_option_type:'Enum: DATETIME, TEXT'
+  },
+  order_line_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    order_bundle_id:'order_bundle 참조 ID (FK)',
+    order_product_id:'order_product 참조 ID (FK)',
+    product_item_id:'product_item 참조 ID (FK)',
+    sku_id:'sku 참조 ID (FK)',
+    amount:'금액',
+    quantity:'수량',
+    version:'Enum: 0, 1, 2, 3',
+    option_name:'Enum: 2026-02-21 18:00 (KST), A, DONGHAE',
+    order_payment_currency:'Enum: JPY, KRW, USD',
+    status:'상태값',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)',
+    order_id:'order 참조 ID (FK) (nullable)'
+  },
+  order_product_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    artist_id:'artist 참조 ID (FK)',
+    biz_partner_id:'biz_partner 참조 ID (FK)',
+    commission_id:'commission 참조 ID (FK)',
+    mall_id:'mall 참조 ID (FK)',
+    product_id:'product 참조 ID (FK)',
+    artist_i18n:'JSON 형식 데이터',
+    artist_name:'Enum: Monsta X, SHINee, i-dle',
+    mall_i18n:'JSON 형식 데이터',
+    mall_name:'Enum: CUBE, SMTOWN &STORE, Starship',
+    mall_url_path:'Enum: cube, sm, starship',
+    order_payment_currency:'Enum: KRW, USD',
+    product_i18n:'JSON 형식 데이터',
+    product_name:'Enum: MONSTA X Official Fanclub MONBEBE, [FAST DELIVERY] 2025 BEST CHOI\'s MINHO \'Our Movie\' - 4 CUT PHOTO SET, [Syncopation] OFFICIAL LIGHT STICK VER.3',
+    thumbnail_url:'Enum: https://shop-cdn.berriz.in/product/140282778076288/fanclub.png, https://shop-cdn.berriz.in/product/231715649016512/233764261964992.jpg, https://shop-cdn.berriz.in/product/283984588714816/286137439293504.jpg',
+    commission_type:'Enum: FIXED, PERCENT',
+    product_type:'Enum: FAN_CLUB, GENERAL',
+    product_sale_type:'Enum: PURCHASE, SELF',
+    product_commission_id:'product_commission 참조 ID (FK)',
+    project_id:'project 참조 ID (FK)',
+    sub_project_id:'sub_project 참조 ID (FK)'
+  },
+  orders_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    checkout_id:'checkout 참조 ID (FK)',
+    user_id:'user 참조 ID (FK)',
+    exchange_rates:'Enum: 100JPY/KRW=880.0000000000;KRW/JPY=0.1136363636;KRW/KRW=1.0000000000, KRW/KRW=1.0000000000, KRW/KRW=1.0000000000;KRW/USD=0.0007407407;USD/KRW=1350.0000000000',
+    payment_currency:'Enum: JPY, KRW, USD',
+    device:'Enum: ANDROID, IOS, PC',
+    status:'상태값',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  outgoing_item_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    outgoing_id:'outgoing 참조 ID (FK)',
+    sku_id:'sku 참조 ID (FK)',
+    quantity:'수량',
+    outgoing_quantity:'Enum: 1, 10, 2, 25 (nullable)',
+    ref_type:'Enum: ORDER_LINE, REWARD (nullable)',
+    ref_id:'ref 참조 ID (FK) (nullable)',
+    order_item_snapshot:'JSON 형식 데이터 (nullable)',
+    product_id:'product 참조 ID (FK)',
+    parent_item_id:'parent_item 참조 ID (FK)',
+    sale_type:'Enum: LICENSE, SELF'
+  },
+  outgoing_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    status:'상태값',
+    warehouse_id:'warehouse 참조 ID (FK)',
+    shipping_id:'shipping 참조 ID (FK)',
+    type:'유형 구분',
+    method:'Enum: PARCEL, PICKUP',
+    external_ref_id:'external_ref 참조 ID (FK)',
+    ref_id:'ref 참조 ID (FK)',
+    order_id:'order 참조 ID (FK)',
+    origin_outgoing_id:'origin_outgoing 참조 ID (FK)',
+    biz_partner_id:'biz_partner 참조 ID (FK)',
+    order_snapshot:'JSON 형식 데이터'
+  },
+  payment_cancel_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    claim_id:'claim 참조 ID (FK)',
+    payment_id:'payment 참조 ID (FK)',
+    amount:'금액',
+    currency:'통화 코드',
+    pg_cancel_id:'pg_cancel 참조 ID (FK)',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  payment_detail_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    payment_id:'payment 참조 ID (FK)',
+    card_installment:'Enum: 0, 3 (nullable)',
+    pg_payment_method_code:'Enum: 01, 02, 06, 07, 12, 40',
+    pg_payment_method_name:'Enum: KB국민, NH채움, Visa, 비씨, 신한, 카카오머니',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)',
+    card_code:'Enum: 02, 06, 07, 12',
+    approval_currency:'Enum: JPY, KRW'
+  },
+  payment_method_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    name:'Enum: 0원 결제, 계좌이체, 신용카드, 알리페이, 카카오페이, 페이팔',
+    code:'Enum: ALIPAY, BANK_TRANSFER, CREDIT_CARD, CREDIT_CARD_GLOBAL, KAKAO_PAY, PAYPAL',
+    region_type:'Enum: DOMESTIC, GLOBAL',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  payment_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    payment_detail_id:'payment_detail 참조 ID (FK)',
+    ref_id:'ref 참조 ID (FK)',
+    user_id:'user 참조 ID (FK)',
+    amount:'금액',
+    commission:'Enum: 0.000, 2.000, 2.200',
+    payment_method_i18n:'JSON 형식 데이터',
+    pg_transaction_id:'pg_transaction 참조 ID (FK)',
+    requested_currency:'Enum: JPY, KRW, USD',
+    payment_method:'Enum: ALIPAY, BANK_TRANSFER, CREDIT_CARD, KAKAO_PAY, PAYPAL',
+    pg_code:'Enum: EXIMBAY, NICEPAY',
+    status:'상태값',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  pg_currency_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    pg_payment_method_id:'pg_payment_method 참조 ID (FK)',
+    currency:'통화 코드',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  pg_payment_method_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    commission_id:'commission 참조 ID (FK)',
+    code_type:'Enum: DETAIL, METHOD',
+    payment_method_code:'Enum: ALIPAY, BANK_TRANSFER, CREDIT_CARD, CREDIT_CARD_GLOBAL',
+    pg_code:'Enum: EXIMBAY, NICEPAY',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  pg_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    code:'Enum: EXIMBAY, NICEPAY, ZERO_PAYMENT',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  pickup_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    order_id:'order 참조 ID (FK)',
+    ref_id:'ref 참조 ID (FK)',
+    item_ref_id:'item_ref 참조 ID (FK)',
+    sku_id:'sku 참조 ID (FK)',
+    quantity:'수량',
+    status:'상태값',
+    warehouse_id:'warehouse 참조 ID (FK)',
+    biz_partner_id:'biz_partner 참조 ID (FK)',
+    completed_at:'(nullable)',
+    version:'Enum: 0, 1',
+    picked_up_at:'(nullable)',
+    outgoing_id:'outgoing 참조 ID (FK)'
+  },
+  platform_category_ro: {
+    _id:'식별자 (PK)',
+    level:'Enum: 1, 2',
+    parentid:'(nullable)'
+  },
+  preemptive_sale_stock_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    checkout_id:'checkout 참조 ID (FK)',
+    product_id:'product 참조 ID (FK)',
+    product_item_id:'product_item 참조 ID (FK)',
+    quantity:'수량',
+    status:'상태값'
+  },
+  product_category_ro: {
+    _id:'식별자 (PK)'
+  },
+  product_ro: {
+    _id:'식별자 (PK)',
+    buyquantitylimit:'Enum: {"enabled":false}, {"enabled":true,"max":3}',
+    couponenabled:'Enum: false, true',
+    display:'Enum: false, true',
+    i18n:'JSON 형식 데이터',
+    images:'JSON 형식 데이터',
+    mallcategoryids:'Enum: [\'172845827663307\'], [\'189323979571394\'], [\'189323979571401\'], [\'189323979571405\', \'189323979571406\'], [\'189323979571406\', \'189323979571405\'], [\'189323979571407\']',
+    options:'JSON 형식 데이터',
+    platformcategoryids:'Enum: [\'10010\'], [\'1010\'], [\'11010\'], [\'4010\'], [\'5020\'], [\'5030\']',
+    price:'금액',
+    productcategoryids:'Enum: [\'1\'], [\'41\']',
+    purchaseconditions:'JSON 형식 데이터',
+    saletype:'Enum: PURCHASE, SELF',
+    sellablequantityexists:'Enum: false, true',
+    status:'상태값',
+    type:'유형 구분',
+    chartdata:'JSON 형식 데이터',
+    commission:'(nullable)',
+    firstsalestartat:'Enum: 2024-01-01 03:00:00.000, 2025-11-19 21:00:00.000, 2025-12-01 06:00:00.000, 2026-01-16 05:10:57.000, 2026-01-28 06:00:00.000, 2026-02-23 06:00:00.000'
+  },
+  purchased_quantity_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    order_id:'order 참조 ID (FK)',
+    order_line_id:'order_line 참조 ID (FK)',
+    product_id:'product 참조 ID (FK)',
+    product_item_id:'product_item 참조 ID (FK)',
+    user_id:'user 참조 ID (FK)',
+    canceled_quantity:'Enum: 0, 1',
+    ordered_quantity:'Enum: 1, 2',
+    version:'Enum: 0, 1'
+  },
+  remote_area_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    type:'유형 구분'
+  },
+  sale_country_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    country:'국가 코드',
+    currency:'통화 코드',
+    language:'Enum: EN, JA, ZH_HANS'
+  },
+  sku_group_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    biz_partner_id:'biz_partner 참조 ID (FK)',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  sku_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    manufacturer_id:'manufacturer 참조 ID (FK)',
+    length:'Enum: 135, 145, 230',
+    width:'Enum: 135, 145, 230',
+    type:'유형 구분',
+    currency:'통화 코드',
+    name:'Enum: MINI DOLL KEY RING_D.O., SUPER  CD PLAYER SET_LEETEUK, 삼성라이온즈 하드 로고볼',
+    sku_code:'Enum: 26AC-BA-HD-001, 8800356757700, 8800356758554',
+    status:'상태값',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)',
+    sku_group_id:'sku_group 참조 ID (FK)',
+    description:'Enum: Baseball, CDP, KEY RING'
+  },
+  sold_quantity_ro: {
+    _id:'식별자 (PK)',
+    quantity:'수량'
+  },
+  stock_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    sku_id:'sku 참조 ID (FK)',
+    warehouse_id:'warehouse 참조 ID (FK)',
+    available_quantity:'Enum: -13, 0, 1, 29, 3',
+    version:'Enum: 0, 1, 12, 3, 5, 7',
+    physical_quantity:'Enum: -13, 0, 1, 29, 3'
+  },
+  stock_usage_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    ref_id:'ref 참조 ID (FK)',
+    sku_id:'sku 참조 ID (FK)',
+    stock_id:'stock 참조 ID (FK)',
+    delta:'Enum: -1, -10, -2, -3',
+    type:'유형 구분'
+  },
+  user_coupons_ro: {
+    _id:'식별자 (PK)'
+  },
+  user_delivery_address_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    user_id:'user 참조 ID (FK)',
+    default_address:'Enum: 0, 1',
+    city:'Enum: Kab. Malang, New Taipei City, hirose-machi,naka-ku,hiroshima-shi',
+    country:'국가 코드',
+    state_or_province:'Enum: East Java, Taiwan, hiroshima',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  user_favorites_ro: {
+    _id:'식별자 (PK)',
+    artistshopfavorites:'Enum: [\'189356575242944\'], [\'189371094227648\', \'139766400628480\', \'189370806205120\'], [\'204678854043392\', \'189357132962496\'], [\'204678854043392\'], [\'224527152959424\'], [\'226520949288896\']',
+    mallfavorites:'Enum: [\'286978355384384\'], []'
+  },
+  users_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    country:'국가 코드',
+    status:'상태값',
+    deleted_at:'삭제 일시 (NULL이면 미삭제)'
+  },
+  zone_country_mapping_ro: {
+    id:'식별자 (PK)',
+    created_at:'생성 일시',
+    updated_at:'수정 일시',
+    country:'국가 코드',
+    zone_code:'Enum: H, I, J, K, M, Z'
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// ENUM VALUES (from sample data analysis)
+// ═══════════════════════════════════════════════════════════════════
+const ENUM_VALS = {
+  adjustment_ro: {
+    reason:["ADJUSTMENT", "DAMAGED", "DISCREPANCY", "ETC", "TAKING"],
+    type:["EXTERNAL", "MANAGING"]
+  },
+  artist_ro: {
+    berrizartistname:["GIRLS' GENERATION", "KiiiKiii", "TVXQ!", "WayV", "최유리"]
+  },
+  artist_shop_ro: {
+    berrizcommunityid:["10", "14", "4"],
+    berrizcommunitykey:["monstax", "nowz", "woodz"],
+    display:["false", "true"],
+    displayberrizcommunitylinkbutton:["false", "true"],
+    keywords:["['ATEEZ', '에이티즈']", "['KANGTA']", "['NCT DREAM']", "['NOWZ', '나우즈']", "['몬엑', '몬엑샵', 'Monx샵', 'Monx', '몬베베샵']", "[]"],
+    ogimage:["artist_shop/189371993905856/217528888063872.png", "artist_shop/204678318532352/227449241090624.png", "artist_shop/208216825921792/217383414201344.png", "artist_shop/228523883594944/228523366278336.png", "artist_shop/313154016138560/313783657998208.jpg"]
+  },
+  bundled_sku_ro: {
+    quantity:["1", "2"]
+  },
+  cart_line_item_ro: {
+    value:["b", "Cx", "Ddd", "Df", "ㅂㅈ", "ㅎㅎ", "가나다라마가나다라마", "일이삼사오육칠팔구십"]
+  },
+  cart_line_ro: {
+    selected:["0", "1"]
+  },
+  checkout_ro: {
+    currency:["JPY", "KRW", "USD"],
+    exchange_rates:["100JPY/KRW=880.0000000000;KRW/JPY=0.1136363636;KRW/KRW=1.0000000000", "KRW/KRW=1.0000000000", "KRW/KRW=1.0000000000;KRW/USD=0.0007407407;USD/KRW=1350.0000000000"],
+    receiving_type:["DELIVERY", "NONE"],
+    source_type:["CART", "PRODUCT_DETAIL"],
+    status:["COMPLETED", "CREATED"]
+  },
+  claim_delivery_fee_ro: {
+    currency:["JPY", "KRW"]
+  },
+  claim_line_ro: {
+    quantity:["1", "2"]
+  },
+  claim_order_coupon_ro: {
+    cancel_currency:["KRW", "USD"]
+  },
+  claim_ro: {
+    claim_reason:["BUYER", "SELLER"],
+    claim_type:["CANCEL", "EXCHANGE"],
+    creation_description:["Selected the wrong option", "临时改变主意", "단순 변심", "몬스터X 키트 팬클럽 카드 불량 - 카드 재배송 필요", "미수령 취소", "옵션 잘못 선택"],
+    description:["Selected the wrong option", "临时改变主意", "단순 변심", "몬스타엑스 자동 재배송 요청", "미수령 취소", "옵션 잘못 선택"],
+    product_disposition_method:["DISPOSE", "NONE_DELIVERY"],
+    refund_currency:["JPY", "KRW"],
+    status:["REDELIVERED", "REFUNDED"]
+  },
+  collection_ro: {
+    displayperiod:["[253402300799000, 1770191760000]", "[253402300799000, 1771897800000]", "[253402300799000, 1773023400000]"],
+    urlpath:["axzkga44ll", "frequency", "vl5cedj532", "wayvwinterspecialalbum", "z03iloy6mi"]
+  },
+  commission_ro: {
+    commission:["0.000", "2.050", "2.200", "3.000"]
+  },
+  contract_project_ro: {
+    name:["22_데뷔기념MD", "25_ae_라이선스MD", "25_시즌그리팅_기획MD", "25_예성_콘서트MD", "26_NJ_앨범MD"]
+  },
+  coupon_ro: {
+    redeemedinfo:["['1000.0', 1769641704223, 278135015747649]", "['2000', 1771927398077, 296859941815810]", "['2000', 1772438247204, 301044424532226]", "['9400.0', 1769849592780, 279838548957761]"],
+    status:["UNUSED", "USED"]
+  },
+  delivery_item_ro: {
+    pre_sale_deliver_end:["2026-01-02", "2026-02-05", "2026-02-25", "2026-03-16", "2026-03-31", "2026-04-07", "2026-04-18", "2026-05-31"],
+    pre_sale_deliver_start:["2025-12-26", "2026-01-30", "2026-02-20", "2026-03-11", "2026-03-20", "2026-03-23", "2026-03-24", "2026-04-01"],
+    quantity:["1", "4"]
+  },
+  delivery_ro: {
+    pre_sale_deliver_end:["2025-08-29", "2026-04-07", "2026-04-30", "2026-05-31"],
+    pre_sale_deliver_start:["2025-08-22", "2026-01-01", "2026-03-31", "2026-04-01"],
+    receiver_city:["Tokyo", "Yamanashi shi"],
+    receiver_country:["JP", "KR"],
+    receiver_state_or_province:["Japan", "Yamanashi"],
+    region:["DOMESTIC", "OVERSEAS"],
+    status:["COMPLETED", "IN_PROGRESS", "WAITING"],
+    version:["0", "1", "2", "3"]
+  },
+  exchange_rate_ro: {
+    base:["CAD", "IDR", "JPY", "KRW", "USD"],
+    base_unit:["1", "100"],
+    counter:["KRW", "MOP", "NZD", "TRY", "TWD", "USD"]
+  },
+  incoming_item_ro: {
+    memo:["12/05  LDG -> 베리즈 입고", "2/21-22 H2H 팬미팅MD 현장수령"],
+    missing_quantity:["0", "1"],
+    ref_type:["CLAIM_LINE", "NONE"]
+  },
+  international_delivery_fee_ro: {
+    zone_code:["A", "H", "J", "P", "Q", "X", "Y", "Z"]
+  },
+  location_ro: {
+    pickup_method:["BUTTON", "SIGN"]
+  },
+  mall_category_product_count_ro: {
+    productcount:["0", "1", "12", "17", "2", "3", "6"]
+  },
+  mall_ro: {
+    display:["false", "true"],
+    ogimage:["mall/172845827655104/228204661529792.png", "mall/189323979571392/207454773567360.png", "mall/228522710869184/228522652271808.png", "mall/281890899123200/282546559231616.jpeg", "mall/286978355384384/296275569005376.png", "mall/313761238540416/316476036235136.jpg", "mall/317849831562304/321592092393536.jpg"],
+    profile:["cbt", "prod"]
+  },
+  notice_ro: {
+    admintitle:["2025 정승환의 안녕, 겨울 : 사랑이라 불린 OFFICIAL MD 판매 안내", "공지입니다.", "제이스 공지입니다. 35", "제이스 공지입니다. 39", "테스트샵홈공지#25"],
+    bizpartnerid:["3", "5"],
+    displaytarget:["['ARTIST_SHOP', 139766400628485]", "['ARTIST_SHOP', 184830871949440]", "['ARTIST_SHOP', 189801601228288]", "['HOME', None]"]
+  },
+  order_bundle_ro: {
+    delivery_fee_currency:["JPY", "KRW", "USD"],
+    receiving_type:["DELIVERY", "NONE"]
+  },
+  order_coupon_discount_ro: {
+    applied_currency:["KRW", "USD"],
+    benefit_type:["FIXED_AMOUNT_DISCOUNT", "FIXED_RATE_DISCOUNT"],
+    discount_rate:["10.000", "5.000"]
+  },
+  order_failure_ro: {
+    cause_type:["DOMAIN_ERROR", "PG_ERROR"],
+    error_code:["CAN_NOT_CANCEL_ORDER", "PAYMENT_PG_COMPLETE_FAILED"],
+    step:["CANCEL", "ORDER"]
+  },
+  order_line_item_ro: {
+    display_order:["0", "1"],
+    option_name:["CELEB", "Member", "Option", "Pick-up Time", "사이즈"],
+    select_option_type:["DATETIME", "TEXT"]
+  },
+  order_line_ro: {
+    option_name:["A", "DONGHAE"],
+    order_payment_currency:["JPY", "KRW", "USD"],
+    quantity:["1", "2"],
+    status:["COMPLETED", "CONFIRMED", "CREATED", "FAILED"],
+    version:["0", "1", "2", "3"]
+  },
+  order_product_ro: {
+    artist_name:["Monsta X", "SHINee", "i-dle"],
+    commission_type:["FIXED", "PERCENT"],
+    mall_name:["CUBE", "SMTOWN &STORE", "Starship"],
+    mall_url_path:["cube", "sm", "starship"],
+    order_payment_currency:["KRW", "USD"],
+    product_name:["MONSTA X Official Fanclub MONBEBE", "[FAST DELIVERY] 2025 BEST CHOI's MINHO 'Our Movie' - 4 CUT PHOTO SET", "[Syncopation] OFFICIAL LIGHT STICK VER.3"],
+    product_sale_type:["PURCHASE", "SELF"],
+    product_type:["FAN_CLUB", "GENERAL"],
+    thumbnail_url:["https://shop-cdn.berriz.in/product/140282778076288/fanclub.png", "https://shop-cdn.berriz.in/product/231715649016512/233764261964992.jpg", "https://shop-cdn.berriz.in/product/283984588714816/286137439293504.jpg"]
+  },
+  orders_ro: {
+    device:["ANDROID", "IOS", "PC"],
+    exchange_rates:["100JPY/KRW=880.0000000000;KRW/JPY=0.1136363636;KRW/KRW=1.0000000000", "KRW/KRW=1.0000000000", "KRW/KRW=1.0000000000;KRW/USD=0.0007407407;USD/KRW=1350.0000000000"],
+    payment_currency:["JPY", "KRW", "USD"],
+    status:["COMPLETED", "CREATED", "FAILED"]
+  },
+  outgoing_item_ro: {
+    outgoing_quantity:["1", "10", "2", "25"],
+    quantity:["1", "10", "2", "25"],
+    ref_type:["ORDER_LINE", "REWARD"],
+    sale_type:["LICENSE", "SELF"]
+  },
+  outgoing_ro: {
+    method:["PARCEL", "PICKUP"],
+    status:["COMPLETED", "WAIT"]
+  },
+  payment_cancel_ro: {
+    currency:["JPY", "KRW"],
+    pg_cancel_id:["13215FC635W0000167644308", "1m01012601201421176929", "1m01012602241824304049", "t1m0101260118153318a887"]
+  },
+  payment_detail_ro: {
+    approval_currency:["JPY", "KRW"],
+    card_code:["02", "06", "07", "12"],
+    card_installment:["0", "3"],
+    pg_payment_method_code:["01", "02", "06", "07", "12", "40", "P001", "P101"],
+    pg_payment_method_name:["KB국민", "NH채움", "Visa", "비씨", "신한", "카카오머니", "페이팔", "현대"]
+  },
+  payment_method_ro: {
+    code:["ALIPAY", "BANK_TRANSFER", "CREDIT_CARD", "CREDIT_CARD_GLOBAL", "KAKAO_PAY", "PAYPAL", "ZERO_PAYMENT"],
+    name:["0원 결제", "계좌이체", "신용카드", "알리페이", "카카오페이", "페이팔", "해외 신용카드"],
+    region_type:["DOMESTIC", "GLOBAL"]
+  },
+  payment_ro: {
+    commission:["0.000", "2.000", "2.200"],
+    payment_method:["ALIPAY", "BANK_TRANSFER", "CREDIT_CARD", "KAKAO_PAY", "PAYPAL"],
+    pg_code:["EXIMBAY", "NICEPAY"],
+    pg_transaction_id:["13215FC635W0000155851060", "13215FC635W0000165334808", "kakaoent1m01012601140028094211", "kakaoent1m01012602241108442683"],
+    requested_currency:["JPY", "KRW", "USD"],
+    status:["CANCELED", "COMPLETED", "REQUESTED"]
+  },
+  pg_currency_ro: {
+    currency:["KRW", "USD"]
+  },
+  pg_payment_method_ro: {
+    code_type:["DETAIL", "METHOD"],
+    payment_method_code:["ALIPAY", "BANK_TRANSFER", "CREDIT_CARD", "CREDIT_CARD_GLOBAL"],
+    pg_code:["EXIMBAY", "NICEPAY"]
+  },
+  pg_ro: {
+    code:["EXIMBAY", "NICEPAY", "ZERO_PAYMENT"]
+  },
+  pickup_ro: {
+    quantity:["1", "2", "3"],
+    status:["COMPLETED", "WAITING"],
+    version:["0", "1"]
+  },
+  platform_category_ro: {
+    level:["1", "2"]
+  },
+  preemptive_sale_stock_ro: {
+    quantity:["1", "5"],
+    status:["CONFIRMED", "PENDING"]
+  },
+  product_ro: {
+    buyquantitylimit:["{\"enabled\":false}", "{\"enabled\":true,\"max\":3}"],
+    couponenabled:["false", "true"],
+    display:["false", "true"],
+    mallcategoryids:["['172845827663307']", "['189323979571394']", "['189323979571401']", "['189323979571405', '189323979571406']", "['189323979571406', '189323979571405']", "['189323979571407']", "['189323979571428']", "['228522710869191']"],
+    platformcategoryids:["['10010']", "['1010']", "['11010']", "['4010']", "['5020']", "['5030']", "['5040']", "['9010']"],
+    productcategoryids:["['1']", "['41']"],
+    saletype:["PURCHASE", "SELF"],
+    sellablequantityexists:["false", "true"],
+    status:["SALE", "SALE_END"]
+  },
+  purchased_quantity_ro: {
+    canceled_quantity:["0", "1"],
+    ordered_quantity:["1", "2"],
+    version:["0", "1"]
+  },
+  sale_country_ro: {
+    country:["AU", "BR", "JP", "MN", "RU", "SG", "TH", "TR", "US", "VN"],
+    currency:["AUD", "BRL", "JPY", "MNT", "RUB", "SGD", "THB", "TRY", "USD", "VND"],
+    language:["EN", "JA", "ZH_HANS"]
+  },
+  sku_ro: {
+    description:["Baseball", "CDP", "KEY RING"],
+    length:["135", "145", "230"],
+    name:["MINI DOLL KEY RING_D.O.", "SUPER  CD PLAYER SET_LEETEUK", "삼성라이온즈 하드 로고볼"],
+    sku_code:["26AC-BA-HD-001", "8800356757700", "8800356758554"],
+    width:["135", "145", "230"]
+  },
+  stock_ro: {
+    available_quantity:["-13", "0", "1", "29", "3"],
+    physical_quantity:["-13", "0", "1", "29", "3"],
+    version:["0", "1", "12", "3", "5", "7"]
+  },
+  stock_usage_ro: {
+    delta:["-1", "-10", "-2", "-3"],
+    type:["OUTGOING_COMPLETED", "OUTGOING_REQUESTED"]
+  },
+  user_delivery_address_ro: {
+    city:["Kab. Malang", "New Taipei City", "hirose-machi,naka-ku,hiroshima-shi"],
+    country:["ID", "JP", "KR", "TW"],
+    default_address:["0", "1"],
+    state_or_province:["East Java", "Taiwan", "hiroshima"]
+  },
+  user_favorites_ro: {
+    artistshopfavorites:["['189356575242944']", "['189371094227648', '139766400628480', '189370806205120']", "['204678854043392', '189357132962496']", "['204678854043392']", "['224527152959424']", "['226520949288896']", "[]"],
+    mallfavorites:["['286978355384384']", "[]"]
+  },
+  users_ro: {
+    country:["ID", "IN", "JP", "KR", "RO", "SA", "TW", "US"],
+    status:["ACTIVATED", "DEACTIVATED"]
+  },
+  zone_country_mapping_ro: {
+    country:["BE", "BR", "CC", "CN", "EG", "GM", "RS", "TG", "TL", "TV"],
+    zone_code:["H", "I", "J", "K", "M", "Z"]
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// SQL QUERY REFERENCE
+// ═══════════════════════════════════════════════════════════════════
+const SQL_QUERIES = [
+  { category:'주문', title:'주문 전체 조회 (유저 + 결제 포함)',
+    sql:`SELECT
+  o.id           AS order_id,
+  u.member_key   AS user_key,
+  o.payment_amount,
+  o.payment_currency,
+  o.status       AS order_status,
+  o.completed_at,
+  p.payment_method,
+  p.pg_code,
+  p.status       AS payment_status
+FROM orders_ro o
+JOIN users_ro u        ON o.user_id = u.id
+LEFT JOIN payment_ro p ON p.ref_id = o.id AND p.ref_type = 'ORDER'
+WHERE o.status = 'COMPLETED'
+ORDER BY o.created_at DESC;` },
+
+  { category:'주문', title:'주문 라인 상세 (SKU + 상품 스냅샷)',
+    sql:`SELECT
+  o.id           AS order_id,
+  ob.id          AS bundle_id,
+  ol.id          AS order_line_id,
+  op.product_name,
+  op.artist_name,
+  op.mall_name,
+  ol.sku_id,
+  s.name         AS sku_name,
+  s.sku_code,
+  ol.quantity,
+  ol.amount,
+  ol.base_currency_amount,
+  ol.status
+FROM orders_ro o
+JOIN order_bundle_ro ob  ON ob.order_id = o.id
+JOIN order_line_ro ol    ON ol.order_bundle_id = ob.id
+JOIN order_product_ro op ON ol.order_product_id = op.id
+JOIN sku_ro s            ON ol.sku_id = s.id
+ORDER BY o.id, ob.id, ol.id;` },
+
+  { category:'주문', title:'주문 옵션 상세 (order_line_item)',
+    sql:`SELECT
+  ol.id          AS order_line_id,
+  oli.option_name,
+  oli.option_value,
+  oli.option_type,
+  oli.display_order,
+  oli.required
+FROM order_line_ro ol
+JOIN order_line_item_ro oli ON oli.order_line_id = ol.id
+ORDER BY ol.id, oli.display_order;` },
+
+  { category:'재고', title:'SKU별 창고 재고 현황',
+    sql:`SELECT
+  sg.code        AS sku_group_code,
+  s.id           AS sku_id,
+  s.name         AS sku_name,
+  s.sku_code,
+  s.barcode,
+  s.status       AS sku_status,
+  st.warehouse_id,
+  st.available_quantity,
+  st.reserved_quantity,
+  st.physical_quantity
+FROM sku_ro s
+JOIN sku_group_ro sg   ON s.sku_group_id = sg.id
+LEFT JOIN stock_ro st  ON st.sku_id = s.id
+ORDER BY sg.code, s.sku_code;` },
+
+  { category:'재고', title:'재고 변동 이력 조회',
+    sql:`SELECT
+  su.sku_id,
+  s.name         AS sku_name,
+  su.type        AS usage_type,
+  su.ref_type,
+  su.ref_id,
+  su.before_quantity,
+  su.after_quantity,
+  su.delta,
+  su.created_at
+FROM stock_usage_ro su
+JOIN sku_ro s ON su.sku_id = s.id
+ORDER BY su.created_at DESC;` },
+
+  { category:'재고', title:'번들 SKU 구성 조회',
+    sql:`SELECT
+  parent.id     AS parent_sku_id,
+  parent.name   AS parent_sku_name,
+  parent.sku_code,
+  child.id      AS child_sku_id,
+  child.name    AS child_sku_name,
+  child.sku_code AS child_sku_code,
+  b.quantity
+FROM bundled_sku_ro b
+JOIN sku_ro parent ON b.sku_id = parent.id
+JOIN sku_ro child  ON b.bundled_sku_id = child.id;` },
+
+  { category:'클레임', title:'클레임 현황 (취소/교환)',
+    sql:`SELECT
+  c.id           AS claim_id,
+  c.claim_type,
+  c.claim_reason,
+  c.status       AS claim_status,
+  o.id           AS order_id,
+  cl.sku_id,
+  sk.name        AS sku_name,
+  cl.quantity,
+  c.refund_amount,
+  c.refund_currency,
+  c.completed_at,
+  pc.amount      AS canceled_payment
+FROM claim_ro c
+JOIN orders_ro o          ON c.order_id = o.id
+JOIN claim_line_ro cl     ON cl.claim_id = c.id
+JOIN sku_ro sk            ON cl.sku_id = sk.id
+LEFT JOIN payment_cancel_ro pc ON pc.claim_id = c.id
+ORDER BY c.created_at DESC;` },
+
+  { category:'배송', title:'출고 → 배송 현황 조회',
+    sql:`SELECT
+  out.id         AS outgoing_id,
+  out.order_id,
+  out.status     AS outgoing_status,
+  out.method,
+  d.id           AS delivery_id,
+  d.status       AS delivery_status,
+  d.region,
+  d.started_at,
+  d.completed_at,
+  oi.sku_id,
+  sk.name        AS sku_name,
+  oi.quantity
+FROM outgoing_ro out
+LEFT JOIN delivery_ro d       ON d.outgoing_id = out.id
+JOIN outgoing_item_ro oi      ON oi.outgoing_id = out.id
+JOIN sku_ro sk                ON oi.sku_id = sk.id
+ORDER BY out.created_at DESC;` },
+
+  { category:'배송', title:'입고 현황 (반품 입고 포함)',
+    sql:`SELECT
+  i.id           AS incoming_id,
+  i.type,
+  i.status,
+  i.claim_id,
+  i.warehouse_id,
+  ii.sku_id,
+  sk.name        AS sku_name,
+  ii.requested_quantity,
+  ii.incoming_quantity,
+  ii.damaged_quantity,
+  ii.missing_quantity,
+  i.completed_at
+FROM incoming_ro i
+JOIN incoming_item_ro ii ON ii.incoming_id = i.id
+JOIN sku_ro sk           ON ii.sku_id = sk.id
+ORDER BY i.created_at DESC;` },
+
+  { category:'쿠폰', title:'쿠폰 적용 할인 내역',
+    sql:`SELECT
+  ocd.order_line_id,
+  ol.order_id,
+  ocd.coupon_type,
+  ocd.benefit_type,
+  ocd.discount_rate,
+  ocd.applied_discount_amount,
+  ocd.applied_currency,
+  cr.status      AS coupon_status,
+  cr.expiredat   AS coupon_expiry
+FROM order_coupon_discount_ro ocd
+JOIN order_line_ro ol     ON ocd.order_line_id = ol.id
+JOIN coupon_ro cr         ON ocd.coupon_id = cr._id
+JOIN coupon_policy_ro cp  ON ocd.coupon_policy_id = cp._id
+ORDER BY ol.order_id;` },
+
+  { category:'결제', title:'결제 상세 (PG + 카드정보)',
+    sql:`SELECT
+  p.id           AS payment_id,
+  p.ref_id       AS order_id,
+  p.payment_method,
+  p.pg_code,
+  p.amount,
+  p.canceled_amount,
+  p.status,
+  pd.pg_payment_method_name,
+  pd.bank_name,
+  pd.card_installment,
+  p.requested_at,
+  p.completed_at
+FROM payment_ro p
+LEFT JOIN payment_detail_ro pd ON pd.payment_id = p.id
+WHERE p.ref_type = 'ORDER'
+ORDER BY p.created_at DESC;` },
+
+  { category:'상품', title:'아티스트 × 상품 × 판매 수량',
+    sql:`SELECT
+  a._id          AS artist_id,
+  a.berrizartistname AS artist_name,
+  m._id          AS mall_id,
+  p._id          AS product_id,
+  p.status       AS product_status,
+  p.saletype,
+  COALESCE(sq.quantity, 0) AS sold_quantity
+FROM artist_ro a
+JOIN mall_ro m            ON a.mallid = m._id
+JOIN product_ro p         ON p.artistid = a._id AND p.mallid = m._id
+LEFT JOIN sold_quantity_ro sq ON sq.productid = p._id
+ORDER BY sold_quantity DESC;` },
+
+  { category:'국제배송', title:'국가별 배송 Zone + 요금 조회',
+    sql:`SELECT
+  z.country,
+  z.zone_code,
+  f.min_weight,
+  f.fee           AS delivery_fee_krw,
+  d.dim_factor
+FROM zone_country_mapping_ro z
+JOIN international_delivery_fee_ro f ON f.zone_code = z.zone_code
+JOIN international_dim_factor_ro d   ON d.zone_code = z.zone_code
+ORDER BY z.country, f.min_weight;` },
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// BUILD FK INDEX
+// ═══════════════════════════════════════════════════════════════════
+
+// fkIndex[tableName] = { out: [{srcCol, dstTable, dstCol}], in: [{srcTable, srcCol, dstCol}] }
+const fkIndex = {};
+TABLES.forEach(t => { fkIndex[t.name] = { out: [], in: [] }; });
+
+TABLES.forEach(t => {
+  t.cols.forEach(([colName, colType, flags]) => {
+    const parts = flags.split('|');
+    parts.forEach(f => {
+      if (f.startsWith('FK:')) {
+        const ref = f.slice(3);
+        const dotIdx = ref.indexOf('.');
+        const dstTable = ref.slice(0, dotIdx);
+        const dstCol = ref.slice(dotIdx + 1);
+        if (fkIndex[t.name]) {
+          fkIndex[t.name].out.push({ srcCol: colName, dstTable, dstCol });
+        }
+        if (fkIndex[dstTable]) {
+          fkIndex[dstTable].in.push({ srcTable: t.name, srcCol: colName, dstCol });
+        }
+      }
+    });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════════
+
+const canvas = document.getElementById('canvas');
+const canvasWrap = document.getElementById('canvas-wrap');
+const svgEl = document.getElementById('svg-overlay');
+const tooltip = document.getElementById('tooltip');
+const header = document.getElementById('header');
+
+// Domain visibility state
+const domainVisible = {};
+DOMAIN_ORDER.forEach(d => domainVisible[d] = true);
+
+// Build domain filter buttons
+const h1 = header.querySelector('h1');
+DOMAIN_ORDER.forEach(domain => {
+  const color = DOMAIN_COLORS[domain];
+  const btn = document.createElement('button');
+  btn.className = 'domain-btn active';
+  btn.style.setProperty('--color', color);
+  btn.textContent = domain;
+  btn.dataset.domain = domain;
+  btn.addEventListener('click', () => toggleDomain(domain, btn));
+  header.appendChild(btn);
+});
+
+function toggleDomain(domain, btn) {
+  domainVisible[domain] = !domainVisible[domain];
+  btn.className = 'domain-btn ' + (domainVisible[domain] ? 'active' : 'inactive');
+  const col = document.querySelector(`.domain-col[data-domain="${domain}"]`);
+  if (col) col.style.display = domainVisible[domain] ? 'flex' : 'none';
+}
+
+// Group tables by domain
+const byDomain = {};
+DOMAIN_ORDER.forEach(d => byDomain[d] = []);
+TABLES.forEach(t => { if (byDomain[t.domain]) byDomain[t.domain].push(t); });
+
+// Build SVG defs (arrowhead per domain color)
+const defs = svgEl.querySelector('defs');
+DOMAIN_ORDER.forEach(domain => {
+  const color = DOMAIN_COLORS[domain];
+  const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+  marker.setAttribute('id', `arrow-${domain}`);
+  marker.setAttribute('markerWidth', '8');
+  marker.setAttribute('markerHeight', '8');
+  marker.setAttribute('refX', '6');
+  marker.setAttribute('refY', '3');
+  marker.setAttribute('orient', 'auto');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M0,0 L0,6 L8,3 z');
+  path.setAttribute('fill', color);
+  marker.appendChild(path);
+  defs.appendChild(marker);
+});
+
+// Helper: column element ID
+function colId(tableName, colName) {
+  return `col-${tableName}-${colName}`;
+}
+
+// Helper: check if column is audit
+const AUDIT_COLS = new Set(['created_at','updated_at','created_ip','updated_ip','deleted_at','createdat','updatedat','deletedat']);
+
+// Render domain columns
+DOMAIN_ORDER.forEach(domain => {
+  const color = DOMAIN_COLORS[domain];
+  const col = document.createElement('div');
+  col.className = 'domain-col';
+  col.dataset.domain = domain;
+  col.style.setProperty('--color', color);
+
+  const label = document.createElement('div');
+  label.className = 'domain-label';
+  label.style.setProperty('--color', color);
+  label.textContent = domain.toUpperCase();
+  col.appendChild(label);
+
+  byDomain[domain].forEach(table => {
+    col.appendChild(buildTableCard(table));
+  });
+
+  canvas.appendChild(col);
+});
+
+function buildTableCard(table) {
+  const color = DOMAIN_COLORS[table.domain];
+  const fkCount = (fkIndex[table.name].out.length + fkIndex[table.name].in.length);
+
+  const card = document.createElement('div');
+  card.className = 'table-card';
+  card.style.setProperty('--color', color);
+  card.dataset.table = table.name;
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.className = 'table-header';
+  hdr.dataset.table = table.name;
+
+  const nameEl = document.createElement('span');
+  nameEl.className = 'table-name';
+  nameEl.textContent = table.name;
+
+  const badge = document.createElement('span');
+  badge.className = 'fk-badge';
+  badge.textContent = fkCount + ' FK';
+
+  hdr.appendChild(nameEl);
+  hdr.appendChild(badge);
+  card.appendChild(hdr);
+
+  // Columns
+  table.cols.forEach(([colName, colType, flags]) => {
+    const flagParts = flags.split('|');
+    const isPK = flagParts.includes('PK');
+    const fkFlag = flagParts.find(f => f.startsWith('FK:'));
+    const isAudit = !isPK && !fkFlag && AUDIT_COLS.has(colName);
+
+    const row = document.createElement('div');
+    row.className = 'col-row';
+    row.id = colId(table.name, colName);
+
+    if (isPK) row.classList.add('pk-row');
+    else if (fkFlag) row.classList.add('fk-row');
+    else if (isAudit) row.classList.add('audit-row');
+
+    if (fkFlag) {
+      const ref = fkFlag.slice(3);
+      const dotIdx = ref.indexOf('.');
+      row.dataset.fkTable = ref.slice(0, dotIdx);
+      row.dataset.fkCol = ref.slice(dotIdx + 1);
+      row.dataset.srcTable = table.name;
+      row.dataset.srcCol = colName;
+    }
+
+    // Add description and enum
+    const desc = (COL_DESCS[table.name] || {})[colName] || '';
+    if (desc) row.dataset.desc = desc;
+    const enums = (ENUM_VALS[table.name] || {})[colName];
+    if (enums) row.dataset.enum = enums.join(' · ');
+
+    // Badges
+    if (isPK) {
+      const b = document.createElement('span');
+      b.className = 'badge pk';
+      b.textContent = 'PK';
+      row.appendChild(b);
+    }
+    if (fkFlag) {
+      const b = document.createElement('span');
+      b.className = 'badge fk';
+      b.textContent = 'FK';
+      row.appendChild(b);
+    }
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'col-name';
+    nameSpan.textContent = colName;
+    row.appendChild(nameSpan);
+
+    const typeSpan = document.createElement('span');
+    typeSpan.className = 'col-type';
+    typeSpan.textContent = colType;
+    row.appendChild(typeSpan);
+
+    card.appendChild(row);
+  });
+
+  return card;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SVG / LINE DRAWING
+// ═══════════════════════════════════════════════════════════════════
+
+function syncSvgSize() {
+  const w = canvas.scrollWidth;
+  const h = canvas.scrollHeight;
+  svgEl.setAttribute('width', w);
+  svgEl.setAttribute('height', h);
+  svgEl.style.width = w + 'px';
+  svgEl.style.height = h + 'px';
+}
+
+function clearLines() {
+  const lines = svgEl.querySelectorAll('.erd-line');
+  lines.forEach(l => l.remove());
+}
+
+function getCenter(el, side) {
+  // side: 'right' or 'left'
+  const rect = el.getBoundingClientRect();
+  const wrapRect = canvasWrap.getBoundingClientRect();
+  const scrollLeft = canvasWrap.scrollLeft;
+  const scrollTop = canvasWrap.scrollTop;
+
+  const x = side === 'right'
+    ? rect.right - wrapRect.left + scrollLeft
+    : rect.left - wrapRect.left + scrollLeft;
+  const y = rect.top - wrapRect.top + scrollTop + rect.height / 2;
+  return { x, y };
+}
+
+function drawLine(srcEl, dstEl, color, domain) {
+  if (!srcEl || !dstEl) return;
+
+  const src = getCenter(srcEl, 'right');
+  const dst = getCenter(dstEl, 'left');
+
+  // Determine if same side (same approximate x) → exit left
+  const sameSide = Math.abs(src.x - dst.x) < 320;
+
+  let d;
+  if (sameSide) {
+    // Both elements in same column area: exit and enter from left
+    const srcL = getCenter(srcEl, 'left');
+    const dstL = getCenter(dstEl, 'left');
+    const offset = 28;
+    const sx = srcL.x - offset;
+    const dx = dstL.x - offset;
+    d = `M${srcL.x},${srcL.y} C${sx - 40},${srcL.y} ${dx - 40},${dstL.y} ${dstL.x},${dstL.y}`;
+  } else {
+    const midX = (src.x + dst.x) / 2;
+    const cpOffset = Math.min(Math.abs(dst.x - src.x) * 0.45, 150);
+    const cp1x = src.x + cpOffset;
+    const cp2x = dst.x - cpOffset;
+    d = `M${src.x},${src.y} C${cp1x},${src.y} ${cp2x},${dst.y} ${dst.x},${dst.y}`;
+  }
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('stroke', color);
+  path.setAttribute('stroke-width', '1.8');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('opacity', '0.9');
+  path.setAttribute('marker-end', `url(#arrow-${domain})`);
+  path.classList.add('erd-line');
+  svgEl.appendChild(path);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INTERACTIONS
+// ═══════════════════════════════════════════════════════════════════
+
+let activeScrollHandler = null;
+
+function clearAllHighlights() {
+  document.querySelectorAll('.table-card').forEach(c => {
+    c.classList.remove('highlighted', 'dimmed');
+  });
+  document.querySelectorAll('.col-row').forEach(r => {
+    r.classList.remove('col-highlighted', 'fk-col-highlighted');
+  });
+  clearLines();
+  hideTooltip();
+  if (activeScrollHandler) {
+    canvasWrap.removeEventListener('scroll', activeScrollHandler);
+    activeScrollHandler = null;
+  }
+}
+
+function dimAllExcept(tableNames) {
+  const set = new Set(tableNames);
+  document.querySelectorAll('.table-card').forEach(card => {
+    const tname = card.dataset.table;
+    if (set.has(tname)) {
+      card.classList.remove('dimmed');
+      card.classList.add('highlighted');
+    } else {
+      card.classList.add('dimmed');
+      card.classList.remove('highlighted');
+    }
+  });
+}
+
+function showTooltip(html, evt) {
+  tooltip.innerHTML = html;
+  tooltip.style.display = 'block';
+  positionTooltip(evt);
+}
+
+function hideTooltip() {
+  tooltip.style.display = 'none';
+}
+
+function positionTooltip(evt) {
+  const pad = 14;
+  let x = evt.clientX + pad;
+  let y = evt.clientY + pad;
+  const tw = tooltip.offsetWidth || 200;
+  const th = tooltip.offsetHeight || 100;
+  if (x + tw > window.innerWidth - 10) x = evt.clientX - tw - pad;
+  if (y + th > window.innerHeight - 10) y = evt.clientY - th - pad;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+
+// FK column hover
+document.addEventListener('mouseover', (evt) => {
+  const fkRow = evt.target.closest('.fk-row');
+  const tableHdr = evt.target.closest('.table-header');
+  const colRow = evt.target.closest('.col-row');
+
+  if (tableHdr) { handleTableHover(tableHdr, evt); return; }
+  if (fkRow)    { handleFkHover(fkRow, evt); return; }
+  if (colRow)   { handleColHover(colRow, evt); return; }
+});
+
+document.addEventListener('mousemove', (evt) => {
+  if (tooltip.style.display === 'block') {
+    positionTooltip(evt);
+  }
+});
+
+document.addEventListener('mouseout', (evt) => {
+  const fkRow = evt.target.closest('.fk-row');
+  const tableHdr = evt.target.closest('.table-header');
+  if (!fkRow && !tableHdr) return;
+
+  const related = evt.relatedTarget;
+  if (related && (related.closest('.fk-row') || related.closest('.table-header'))) return;
+  clearAllHighlights();
+});
+
+function handleFkHover(row, evt) {
+  clearAllHighlights();
+  syncSvgSize();
+
+  const srcTable = row.dataset.srcTable;
+  const srcCol = row.dataset.srcCol;
+  const dstTable = row.dataset.fkTable;
+  const dstCol = row.dataset.fkCol;
+
+  // Highlight rows
+  row.classList.add('fk-col-highlighted');
+  const dstEl = document.getElementById(colId(dstTable, dstCol));
+  if (dstEl) dstEl.classList.add('col-highlighted');
+
+  // Dim tables
+  dimAllExcept([srcTable, dstTable]);
+
+  // Draw line
+  const domain = TABLES.find(t => t.name === srcTable)?.domain;
+  const color = domain ? DOMAIN_COLORS[domain] : '#89b4fa';
+  drawLine(row, dstEl, color, domain);
+
+  // Tooltip
+  const srcDesc = (COL_DESCS[srcTable] || {})[srcCol] || '';
+  const enumStr = (ENUM_VALS[srcTable] || {})[srcCol]?.join(' · ') || '';
+  const html = `<div class="tt-title">${srcTable}</div>
+    <div class="tt-col">${srcCol}</div>
+    ${srcDesc ? `<div class="tt-desc">${srcDesc}</div>` : ''}
+    ${enumStr ? `<div class="tt-section">가능한 값</div><div class="tt-enums">${enumStr}</div>` : ''}
+    <div class="tt-section">관계</div>
+    <div class="tt-item"><span class="tt-arrow">→</span> ${dstTable}.<strong>${dstCol}</strong></div>`;
+  showTooltip(html, evt);
+
+  // Redraw on scroll
+  activeScrollHandler = () => {
+    clearLines();
+    syncSvgSize();
+    drawLine(row, dstEl, color, domain);
+  };
+  canvasWrap.addEventListener('scroll', activeScrollHandler);
+}
+
+function handleColHover(row, evt) {
+  const desc = row.dataset.desc || '';
+  const enums = row.dataset.enum || '';
+  if (!desc && !enums) return;
+  const colName = row.id ? row.id.replace(/^col-[^-]+-/, '') : '';
+  let html = '';
+  if (colName) html += `<div class="tt-col">${colName}</div>`;
+  if (desc)  html += `<div class="tt-desc">${desc}</div>`;
+  if (enums) html += `<div class="tt-section">가능한 값</div><div class="tt-enums">${enums}</div>`;
+  if (html) showTooltip(html, evt);
+}
+
+function handleTableHover(hdr, evt) {
+  clearAllHighlights();
+  syncSvgSize();
+
+  const tableName = hdr.dataset.table;
+  const table = TABLES.find(t => t.name === tableName);
+  const domain = table?.domain;
+  const color = domain ? DOMAIN_COLORS[domain] : '#89b4fa';
+
+  const rels = fkIndex[tableName];
+  const relatedTables = new Set([tableName]);
+  rels.out.forEach(r => relatedTables.add(r.dstTable));
+  rels.in.forEach(r => relatedTables.add(r.srcTable));
+
+  dimAllExcept([...relatedTables]);
+
+  // Draw all FK out lines
+  rels.out.forEach(({ srcCol, dstTable, dstCol }) => {
+    const srcEl = document.getElementById(colId(tableName, srcCol));
+    const dstEl = document.getElementById(colId(dstTable, dstCol));
+    if (srcEl) srcEl.classList.add('fk-col-highlighted');
+    if (dstEl) dstEl.classList.add('col-highlighted');
+    drawLine(srcEl, dstEl, color, domain);
+  });
+
+  // Draw all FK in lines (from other tables pointing here)
+  rels.in.forEach(({ srcTable, srcCol, dstCol }) => {
+    const srcTableDomain = TABLES.find(t => t.name === srcTable)?.domain;
+    const srcColor = srcTableDomain ? DOMAIN_COLORS[srcTableDomain] : '#89b4fa';
+    const srcEl = document.getElementById(colId(srcTable, srcCol));
+    const dstEl = document.getElementById(colId(tableName, dstCol));
+    if (srcEl) srcEl.classList.add('fk-col-highlighted');
+    if (dstEl) dstEl.classList.add('col-highlighted');
+    drawLine(srcEl, dstEl, srcColor, srcTableDomain);
+  });
+
+  // Tooltip
+  let html = `<div class="tt-title">${tableName}</div>`;
+  if (rels.out.length > 0) {
+    html += `<div class="tt-item" style="margin-top:4px;color:#f9e2af;font-weight:600;">Outgoing FKs:</div>`;
+    rels.out.forEach(r => {
+      html += `<div class="tt-item"><span class="tt-out">↗</span> ${r.srcCol} → ${r.dstTable}.${r.dstCol}</div>`;
+    });
+  }
+  if (rels.in.length > 0) {
+    html += `<div class="tt-item" style="margin-top:4px;color:#a6e3a1;font-weight:600;">Incoming FKs:</div>`;
+    rels.in.forEach(r => {
+      html += `<div class="tt-item"><span class="tt-in">↙</span> ${r.srcTable}.${r.srcCol} → ${r.dstCol}</div>`;
+    });
+  }
+  if (rels.out.length === 0 && rels.in.length === 0) {
+    html += `<div class="tt-item" style="color:#6c7086;">No FK relationships</div>`;
+  }
+  showTooltip(html, evt);
+
+  // Redraw on scroll
+  activeScrollHandler = () => {
+    clearLines();
+    syncSvgSize();
+    rels.out.forEach(({ srcCol, dstTable, dstCol }) => {
+      const srcEl = document.getElementById(colId(tableName, srcCol));
+      const dstEl = document.getElementById(colId(dstTable, dstCol));
+      drawLine(srcEl, dstEl, color, domain);
+    });
+    rels.in.forEach(({ srcTable, srcCol, dstCol }) => {
+      const srcTableDomain = TABLES.find(t => t.name === srcTable)?.domain;
+      const srcColor = srcTableDomain ? DOMAIN_COLORS[srcTableDomain] : '#89b4fa';
+      const srcEl = document.getElementById(colId(srcTable, srcCol));
+      const dstEl = document.getElementById(colId(tableName, dstCol));
+      drawLine(srcEl, dstEl, srcColor, srcTableDomain);
+    });
+  };
+  canvasWrap.addEventListener('scroll', activeScrollHandler);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+
+// Initial sync
+window.addEventListener('load', () => {
+  syncSvgSize();
+});
+
+// Also sync on resize
+new ResizeObserver(() => syncSvgSize()).observe(canvas);
+
+// ═══════════════════════════════════════════════════════════════════
+// SQL QUERY PANEL
+// ═══════════════════════════════════════════════════════════════════
+function toggleQueryPanel() {
+  document.getElementById('query-panel').classList.toggle('open');
+}
+
+(function initQueryPanel() {
+  const categories = [...new Set(SQL_QUERIES.map(q => q.category))];
+  let activecat = categories[0];
+
+  const tabsEl = document.getElementById('query-category-tabs');
+  const listEl = document.getElementById('query-list');
+
+  function renderTabs() {
+    tabsEl.innerHTML = categories.map(c =>
+      `<button class="qcat-btn${c===activecat?' active':''}" onclick="setQCat('${c}')">${c}</button>`
+    ).join('');
+  }
+
+  function renderList() {
+    const items = SQL_QUERIES.filter(q => q.category === activecat);
+    listEl.innerHTML = items.map((q, i) => `
+      <div class="query-item">
+        <div class="query-item-header" onclick="toggleQuery(this)">
+          <span>${q.title}</span>
+          <button class="copy-btn" onclick="event.stopPropagation();copyQuery(${SQL_QUERIES.indexOf(q)})">복사</button>
+        </div>
+        <div class="query-item-body">
+          <pre>${q.sql}</pre>
+        </div>
+      </div>`).join('');
+  }
+
+  window.setQCat = function(cat) { activecat = cat; renderTabs(); renderList(); };
+  window.toggleQuery = function(hdr) { hdr.nextElementSibling.classList.toggle('open'); };
+  window.copyQuery = function(idx) {
+    navigator.clipboard.writeText(SQL_QUERIES[idx].sql).then(() => {
+      const btn = document.querySelectorAll('.copy-btn')[SQL_QUERIES.filter(q=>q.category===activecat).indexOf(SQL_QUERIES[idx])];
+      if (btn) { btn.textContent = '복사됨!'; setTimeout(() => btn.textContent = '복사', 1500); }
+    });
+  };
+
+  renderTabs();
+  renderList();
+})();
+</script>
+</body>
+</html>
