@@ -181,6 +181,133 @@ QUERIES = {
           )
     """,
 
+    # 배송 헤더: 기간 내 outgoing_ro와 연결된 배송
+    "delivery_ro": f"""
+        SELECT
+            d.id,
+            d.created_at,
+            d.updated_at,
+            d.status,
+            d.type,
+            d.method,
+            d.region,
+            d.biz_partner_id,
+            d.warehouse_id,
+            d.order_id,
+            d.ref_id,
+            d.ref_type,
+            d.outgoing_id,
+            d.started_at,
+            d.completed_at,
+            d.receiver_country
+        FROM {SCHEMA}.delivery_ro d
+        INNER JOIN (
+            SELECT id
+            FROM {SCHEMA}.outgoing_ro
+            WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+        ) og ON d.outgoing_id = og.id
+        WHERE date(d.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+    """,
+
+    # 배송 상세: delivery_ro 기준
+    "delivery_item_ro": f"""
+        SELECT
+            di.id,
+            di.delivery_id,
+            di.sku_id,
+            di.quantity,
+            di.product_id,
+            di.ref_id,
+            di.ref_type,
+            json_extract_scalar(di.item_info, '$.name') AS item_name,
+            json_extract_scalar(di.item_info, '$.optionName') AS option_name
+        FROM {SCHEMA}.delivery_item_ro di
+        INNER JOIN (
+            SELECT d.id
+            FROM {SCHEMA}.delivery_ro d
+            INNER JOIN (
+                SELECT id
+                FROM {SCHEMA}.outgoing_ro
+                WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+            ) og ON d.outgoing_id = og.id
+            WHERE date(d.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+        ) d ON di.delivery_id = d.id
+        WHERE date(di.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+    """,
+
+    # 주문 묶음: outgoing_ro.ref_id (ref_type='ORDER_BUNDLE')
+    "order_bundle_ro": f"""
+        SELECT
+            ob.id,
+            ob.order_id,
+            ob.biz_partner_id,
+            ob.shipping_warehouse_id,
+            ob.created_at,
+            ob.updated_at,
+            ob.receiver_country,
+            ob.delivery_fee,
+            ob.delivery_fee_currency
+        FROM {SCHEMA}.order_bundle_ro ob
+        INNER JOIN (
+            SELECT DISTINCT CAST(ref_id AS BIGINT) AS ref_id
+            FROM {SCHEMA}.outgoing_ro
+            WHERE ref_type = 'ORDER_BUNDLE'
+              AND date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+        ) og ON ob.id = og.ref_id
+    """,
+
+    # 주문 헤더: order_bundle_ro.order_id 기준
+    "orders_ro": f"""
+        SELECT
+            o.id,
+            o.created_at,
+            o.updated_at,
+            o.completed_at,
+            o.status,
+            o.payment_amount,
+            o.payment_currency,
+            o.base_currency,
+            o.device,
+            o.user_id
+        FROM {SCHEMA}.orders_ro o
+        INNER JOIN (
+            SELECT DISTINCT ob.order_id
+            FROM {SCHEMA}.order_bundle_ro ob
+            INNER JOIN (
+                SELECT DISTINCT CAST(ref_id AS BIGINT) AS ref_id
+                FROM {SCHEMA}.outgoing_ro
+                WHERE ref_type = 'ORDER_BUNDLE'
+                  AND date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+            ) og ON ob.id = og.ref_id
+        ) ob ON o.id = ob.order_id
+    """,
+
+    # 주문 라인: order_bundle_ro 기준 (sku_id, 수량, 금액)
+    "order_line_ro": f"""
+        SELECT
+            ol.id,
+            ol.order_bundle_id,
+            ol.sku_id,
+            ol.quantity,
+            ol.amount,
+            ol.base_currency,
+            ol.option_name,
+            ol.created_at,
+            ol.updated_at
+        FROM {SCHEMA}.order_line_ro ol
+        INNER JOIN (
+            SELECT DISTINCT ob.id
+            FROM {SCHEMA}.order_bundle_ro ob
+            INNER JOIN (
+                SELECT DISTINCT CAST(ref_id AS BIGINT) AS ref_id
+                FROM {SCHEMA}.outgoing_ro
+                WHERE ref_type = 'ORDER_BUNDLE'
+                  AND date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+            ) og ON ob.id = og.ref_id
+        ) ob ON ol.order_bundle_id = ob.id
+        WHERE date(ol.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+    """,
+
     # SKU 그룹: stock_usage_ro 기준 SKU의 그룹만
     "sku_group_ro": f"""
         SELECT
