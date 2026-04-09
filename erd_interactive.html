@@ -3318,44 +3318,45 @@ function enterFocusMode(tableName, clickedCol, colRels) {
   const sourceTable = TABLES.find(t => t.name === tableName);
   if (!sourceTable) return;
 
-  // 클릭한 컬럼과 연결된 테이블만 추출
+  // 연결된 테이블 추출
   const outTableNames = [...new Set(colRels.out.map(r => r.dstTable))];
   const inTableNames  = [...new Set(colRels.in.map(r => r.srcTable))];
-
   const outTables = outTableNames.map(n => TABLES.find(t => t.name === n)).filter(Boolean);
   const inTables  = inTableNames.map(n => TABLES.find(t => t.name === n)).filter(Boolean);
 
-  // 왼쪽: 이 컬럼을 참조하는 테이블들 (in)
+  // ── 왼쪽: 클릭한 소스 테이블 ──────────────────────────────────
   const leftCol = document.createElement('div');
-  leftCol.className = 'focus-col';
+  leftCol.className = 'focus-col center-col';
   const leftLabel = document.createElement('div');
-  leftLabel.className = 'focus-col-label label-in';
-  leftLabel.textContent = inTables.length ? `← 이 컬럼을 참조 (${inTables.length})` : '';
-  if (inTables.length) leftCol.appendChild(leftLabel);
-  inTables.forEach(t => leftCol.appendChild(buildTableCard(t)));
-  if (inTables.length) canvas.appendChild(leftCol);
+  leftLabel.className = 'focus-col-label label-center';
+  leftLabel.textContent = `${tableName}  ·  ${clickedCol}`;
+  leftCol.appendChild(leftLabel);
+  leftCol.appendChild(buildTableCard(sourceTable));
+  canvas.appendChild(leftCol);
 
-  // 가운데: 선택한 테이블
-  const centerCol = document.createElement('div');
-  centerCol.className = 'focus-col center-col';
-  const centerLabel = document.createElement('div');
-  centerLabel.className = 'focus-col-label label-center';
-  centerLabel.textContent = `${tableName}  ·  ${clickedCol}`;
-  centerCol.appendChild(centerLabel);
-  centerCol.appendChild(buildTableCard(sourceTable));
-  canvas.appendChild(centerCol);
-
-  // 오른쪽: 이 컬럼이 참조하는 테이블들 (out)
+  // ── 오른쪽: 연관 테이블 전체 (in → out 순) ───────────────────
   const rightCol = document.createElement('div');
   rightCol.className = 'focus-col';
-  const rightLabel = document.createElement('div');
-  rightLabel.className = 'focus-col-label label-out';
-  rightLabel.textContent = outTables.length ? `→ 참조 대상 (${outTables.length})` : '';
-  if (outTables.length) rightCol.appendChild(rightLabel);
-  outTables.forEach(t => rightCol.appendChild(buildTableCard(t)));
-  if (outTables.length) canvas.appendChild(rightCol);
 
-  // SVG 선 그리기
+  if (inTables.length > 0) {
+    const inLabel = document.createElement('div');
+    inLabel.className = 'focus-col-label label-in';
+    inLabel.textContent = `← 이 컬럼을 참조 (${inTables.length})`;
+    rightCol.appendChild(inLabel);
+    inTables.forEach(t => rightCol.appendChild(buildTableCard(t)));
+  }
+
+  if (outTables.length > 0) {
+    const outLabel = document.createElement('div');
+    outLabel.className = 'focus-col-label label-out';
+    outLabel.textContent = `→ 참조 대상 (${outTables.length})`;
+    rightCol.appendChild(outLabel);
+    outTables.forEach(t => rightCol.appendChild(buildTableCard(t)));
+  }
+
+  if (inTables.length + outTables.length > 0) canvas.appendChild(rightCol);
+
+  // ── SVG 선 그리기 ──────────────────────────────────────────────
   requestAnimationFrame(() => {
     syncSvgSize();
 
@@ -3363,7 +3364,7 @@ function enterFocusMode(tableName, clickedCol, colRels) {
     const clickedEl = document.getElementById(colId(tableName, clickedCol));
     if (clickedEl) clickedEl.classList.add('fk-col-highlighted');
 
-    // out 방향 선
+    // out 방향 선 (left → right)
     colRels.out.forEach(({ srcCol, dstTable, dstCol }) => {
       const srcEl = document.getElementById(colId(tableName, srcCol));
       const dstEl = document.getElementById(colId(dstTable, dstCol));
@@ -3372,7 +3373,7 @@ function enterFocusMode(tableName, clickedCol, colRels) {
       drawLine(srcEl || clickedEl, dstEl, DOMAIN_COLORS[domain] || '#89b4fa', domain);
     });
 
-    // in 방향 선
+    // in 방향 선 (right → left)
     colRels.in.forEach(({ srcTable, srcCol, dstCol }) => {
       const srcEl = document.getElementById(colId(srcTable, srcCol));
       const dstEl = document.getElementById(colId(tableName, dstCol));
@@ -3450,10 +3451,20 @@ document.addEventListener('mouseout', (evt) => {
 function handleColHover(row, evt) {
   const desc = row.dataset.desc || '';
   const enums = row.dataset.enum || '';
-  if (!desc && !enums) return;
-  const colName = row.id ? row.id.replace(/^col-[^-]+-/, '') : '';
+  const isPk = row.classList.contains('pk-row');
+  const colName = row.dataset.srcCol || (row.id ? row.id.replace(/^col-[^-]+-/, '') : '');
+  const tableName = row.dataset.srcTable || '';
+
+  // PK id 컬럼 마우스오버 시 FK 참조 alias 표시
+  let pkAlias = '';
+  if (isPk && colName === 'id' && tableName) {
+    pkAlias = tableName.replace(/_ro$/, '') + '_id';
+  }
+
+  if (!desc && !enums && !pkAlias) return;
   let html = '';
   if (colName) html += `<div class="tt-col">${colName}</div>`;
+  if (pkAlias) html += `<div class="tt-item">FK 참조 시: <span style="color:#f9e2af;font-weight:600">${pkAlias}</span></div>`;
   if (desc)  html += `<div class="tt-desc">${desc}</div>`;
   if (enums) html += `<div class="tt-section">가능한 값</div><div class="tt-enums">${enums}</div>`;
   if (html) showTooltip(html, evt);
