@@ -352,6 +352,82 @@
   #overview-btn:hover { background: #45475a; }
   body.focus-mode #overview-btn { display: inline-flex; align-items: center; gap: 4px; }
   body.focus-mode .domain-btn   { display: none; }
+
+  /* ── Column Search ──────────────────────────────────────────────── */
+  #col-search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  body.focus-mode #col-search-wrap { display: none; }
+
+  #col-search {
+    background: #1e1e2e;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    color: #cdd6f4;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 4px 10px 4px 28px;
+    width: 200px;
+    outline: none;
+    transition: border-color 0.15s, width 0.2s;
+  }
+  #col-search:focus {
+    border-color: #89b4fa;
+    width: 260px;
+  }
+  #col-search::placeholder { color: #45475a; }
+  #col-search-icon {
+    position: absolute;
+    left: 8px;
+    color: #45475a;
+    font-size: 12px;
+    pointer-events: none;
+  }
+  #col-search-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  #col-search-clear {
+    position: absolute;
+    right: 7px;
+    background: none;
+    border: none;
+    color: #585b70;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+    display: none;
+  }
+  #col-search-clear:hover { color: #cdd6f4; }
+  #col-search-count {
+    font-size: 10px;
+    color: #a6adc8;
+    white-space: nowrap;
+    min-width: 60px;
+  }
+  #col-search-count.no-result { color: #f38ba8; }
+
+  /* 검색 결과 하이라이트 */
+  .col-row.search-match {
+    background: rgba(166, 227, 161, 0.18) !important;
+    opacity: 1 !important;
+  }
+  .col-row.search-match .col-name {
+    color: #a6e3a1 !important;
+  }
+  .table-card.search-hidden {
+    display: none !important;
+  }
+  .table-card.search-dim {
+    opacity: 0.18;
+    filter: saturate(0.2);
+  }
 </style>
 </head>
 <body>
@@ -359,6 +435,14 @@
 <div id="header">
   <h1>Database ERD</h1>
   <button id="overview-btn" onclick="exitFocusMode()">← Overview</button>
+  <div id="col-search-wrap">
+    <div id="col-search-container">
+      <span id="col-search-icon">🔍</span>
+      <input id="col-search" type="text" placeholder="컬럼명 검색..." autocomplete="off" spellcheck="false" />
+      <button id="col-search-clear" title="검색 초기화">✕</button>
+    </div>
+    <span id="col-search-count"></span>
+  </div>
   <button id="query-panel-btn" onclick="toggleQueryPanel()">📋 SQL 쿼리</button>
 </div>
 
@@ -2957,6 +3041,104 @@ function clearAllHighlights() {
     activeScrollHandler = null;
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// COLUMN SEARCH
+// ═══════════════════════════════════════════════════════════════════
+(function initColSearch() {
+  const input     = document.getElementById('col-search');
+  const clearBtn  = document.getElementById('col-search-clear');
+  const countEl   = document.getElementById('col-search-count');
+
+  function applySearch(query) {
+    const q = query.trim().toLowerCase();
+
+    // 검색어 없으면 전체 초기화
+    if (!q) {
+      clearBtn.style.display = 'none';
+      countEl.textContent = '';
+      countEl.className = 'col-search-count';
+      document.querySelectorAll('.table-card').forEach(card => {
+        card.classList.remove('search-hidden', 'search-dim');
+      });
+      document.querySelectorAll('.col-row').forEach(row => {
+        row.classList.remove('search-match');
+      });
+      // domain-col 레이블 복원
+      document.querySelectorAll('.domain-col').forEach(col => {
+        col.style.display = domainVisible[col.dataset.domain] ? 'flex' : 'none';
+      });
+      return;
+    }
+
+    clearBtn.style.display = 'block';
+
+    let matchedTables = 0;
+    let matchedCols   = 0;
+
+    document.querySelectorAll('.table-card').forEach(card => {
+      const rows = card.querySelectorAll('.col-row');
+      let hasMatch = false;
+
+      rows.forEach(row => {
+        const colName = (row.dataset.srcCol || '').toLowerCase();
+        if (colName.includes(q)) {
+          row.classList.add('search-match');
+          hasMatch = true;
+          matchedCols++;
+        } else {
+          row.classList.remove('search-match');
+        }
+      });
+
+      if (hasMatch) {
+        card.classList.remove('search-hidden', 'search-dim');
+        matchedTables++;
+      } else {
+        card.classList.add('search-dim');
+        card.classList.remove('search-hidden');
+      }
+    });
+
+    // domain-col: 매칭 테이블이 하나도 없는 도메인은 빈 레이블만 남지 않도록 유지
+    document.querySelectorAll('.domain-col').forEach(col => {
+      const visible = domainVisible[col.dataset.domain];
+      col.style.display = visible ? 'flex' : 'none';
+    });
+
+    // 결과 카운트 표시
+    if (matchedTables === 0) {
+      countEl.textContent = '결과 없음';
+      countEl.className = 'col-search-count no-result';
+    } else {
+      countEl.textContent = `${matchedTables}개 테이블 · ${matchedCols}개 컬럼`;
+      countEl.className = 'col-search-count';
+    }
+  }
+
+  input.addEventListener('input', () => applySearch(input.value));
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      input.value = '';
+      applySearch('');
+      input.blur();
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    applySearch('');
+    input.focus();
+  });
+
+  // focus mode 진입/복귀 시 검색 자동 초기화
+  const _exit = window.exitFocusMode;
+  window.exitFocusMode = function() {
+    _exit && _exit();
+    // focus mode 나올 때 검색 결과 유지 (사용자가 원하면 다시 검색)
+  };
+})();
 
 function dimAllExcept(tableNames) {
   const set = new Set(tableNames);
