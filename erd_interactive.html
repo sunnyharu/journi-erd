@@ -421,12 +421,45 @@
   .col-row.search-match .col-name {
     color: #a6e3a1 !important;
   }
-  .table-card.search-hidden {
-    display: none !important;
+
+  /* ── Search Results Panel ─────────────────────────────────────── */
+  #search-results-panel {
+    display: none;
+    flex-direction: column;
+    padding: 20px;
+    gap: 14px;
+    min-height: 100%;
   }
-  .table-card.search-dim {
-    opacity: 0.18;
-    filter: saturate(0.2);
+  #search-results-panel.active { display: flex; }
+
+  #search-results-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    color: #a6adc8;
+    padding: 7px 12px;
+    background: #181825;
+    border-radius: 6px;
+    border: 1px solid #313244;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  #search-results-header strong { color: #a6e3a1; }
+  #search-results-header .sr-count { color: #585b70; margin-left: auto; }
+
+  #search-results-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-content: flex-start;
+    align-items: flex-start;
+  }
+  #search-results-grid .table-card {
+    width: 280px;
+    flex-shrink: 0;
   }
 </style>
 </head>
@@ -461,6 +494,13 @@
 <div id="canvas-wrap">
   <div id="canvas">
     <svg id="svg-overlay"><defs></defs></svg>
+  </div>
+  <div id="search-results-panel">
+    <div id="search-results-header">
+      🔍 <span id="sr-query"></span>
+      <span class="sr-count" id="sr-count"></span>
+    </div>
+    <div id="search-results-grid"></div>
   </div>
 </div>
 <div id="tooltip"></div>
@@ -3043,77 +3083,127 @@ function clearAllHighlights() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// COLUMN SEARCH
+// COLUMN SEARCH  (카드를 검색결과 패널로 모아서 보여주는 방식)
 // ═══════════════════════════════════════════════════════════════════
 (function initColSearch() {
-  const input     = document.getElementById('col-search');
-  const clearBtn  = document.getElementById('col-search-clear');
-  const countEl   = document.getElementById('col-search-count');
+  const input      = document.getElementById('col-search');
+  const clearBtn   = document.getElementById('col-search-clear');
+  const countEl    = document.getElementById('col-search-count');
+  const panel      = document.getElementById('search-results-panel');
+  const grid       = document.getElementById('search-results-grid');
+  const srQuery    = document.getElementById('sr-query');
+  const srCount    = document.getElementById('sr-count');
+  const mainCanvas = document.getElementById('canvas');
+
+  // 카드의 원래 위치를 기억 (card -> {parent, nextSibling})
+  const cardOrigin = new Map();
+  let searchActive = false;
+
+  function enterSearchMode(matchingCards, q) {
+    if (!searchActive) {
+      // 처음 진입 시 canvas 숨기고 panel 열기
+      mainCanvas.style.display = 'none';
+      panel.classList.add('active');
+      searchActive = true;
+    }
+
+    // grid 비우기 (이전 검색 결과 초기화 — 카드는 이미 origin에 기억됨)
+    // 기존 카드 모두 원위치 복원 후 재이동
+    restoreCards();
+
+    // 매칭 카드를 grid로 이동
+    matchingCards.forEach(card => {
+      cardOrigin.set(card, {
+        parent: card.parentElement,
+        next:   card.nextSibling,
+      });
+      grid.appendChild(card);
+    });
+
+    // 헤더 텍스트
+    srQuery.innerHTML = `<strong>"${q}"</strong> 검색 결과`;
+    srCount.textContent = `${matchingCards.length}개 테이블 · ${matchingCards.reduce((s,c)=>s+c.querySelectorAll('.col-row.search-match').length,0)}개 컬럼`;
+  }
+
+  function restoreCards() {
+    cardOrigin.forEach(({parent, next}, card) => {
+      if (next && next.parentElement === parent) {
+        parent.insertBefore(card, next);
+      } else {
+        parent.appendChild(card);
+      }
+    });
+    cardOrigin.clear();
+  }
+
+  function exitSearchMode() {
+    restoreCards();
+    grid.innerHTML = '';
+    panel.classList.remove('active');
+    mainCanvas.style.display = '';
+    searchActive = false;
+  }
+
+  function clearColHighlights() {
+    document.querySelectorAll('.col-row.search-match')
+      .forEach(r => r.classList.remove('search-match'));
+  }
 
   function applySearch(query) {
     const q = query.trim().toLowerCase();
 
-    // 검색어 없으면 전체 초기화
+    clearColHighlights();
+
     if (!q) {
       clearBtn.style.display = 'none';
       countEl.textContent = '';
       countEl.className = 'col-search-count';
-      document.querySelectorAll('.table-card').forEach(card => {
-        card.classList.remove('search-hidden', 'search-dim');
-      });
-      document.querySelectorAll('.col-row').forEach(row => {
-        row.classList.remove('search-match');
-      });
-      // domain-col 레이블 복원
-      document.querySelectorAll('.domain-col').forEach(col => {
-        col.style.display = domainVisible[col.dataset.domain] ? 'flex' : 'none';
-      });
+      exitSearchMode();
       return;
     }
 
     clearBtn.style.display = 'block';
 
-    let matchedTables = 0;
-    let matchedCols   = 0;
+    const matchingCards = [];
+    let totalMatchedCols = 0;
 
-    document.querySelectorAll('.table-card').forEach(card => {
+    // 전체 테이블 카드 순회 (canvas + grid 모두)
+    const allCards = Array.from(document.querySelectorAll('.table-card'));
+    allCards.forEach(card => {
       const rows = card.querySelectorAll('.col-row');
       let hasMatch = false;
 
       rows.forEach(row => {
-        const colName = (row.dataset.srcCol || '').toLowerCase();
-        if (colName.includes(q)) {
+        const colName   = (row.dataset.srcCol  || '').toLowerCase();
+        const tableName = (row.dataset.srcTable || '').toLowerCase();
+        const hit = colName.includes(q) || tableName.includes(q);
+        if (hit) {
           row.classList.add('search-match');
           hasMatch = true;
-          matchedCols++;
-        } else {
-          row.classList.remove('search-match');
+          totalMatchedCols++;
         }
       });
 
-      if (hasMatch) {
-        card.classList.remove('search-hidden', 'search-dim');
-        matchedTables++;
-      } else {
-        card.classList.add('search-dim');
-        card.classList.remove('search-hidden');
+      // 테이블명 자체가 검색어에 매칭되는 경우 카드 전체 포함
+      const cardTable = (card.dataset.table || '').toLowerCase();
+      if (cardTable.includes(q) && !hasMatch) {
+        hasMatch = true;
+        // 테이블명 매칭 시 모든 컬럼 하이라이트 없이 카드만 포함
       }
+
+      if (hasMatch) matchingCards.push(card);
     });
 
-    // domain-col: 매칭 테이블이 하나도 없는 도메인은 빈 레이블만 남지 않도록 유지
-    document.querySelectorAll('.domain-col').forEach(col => {
-      const visible = domainVisible[col.dataset.domain];
-      col.style.display = visible ? 'flex' : 'none';
-    });
-
-    // 결과 카운트 표시
-    if (matchedTables === 0) {
+    if (matchingCards.length === 0) {
       countEl.textContent = '결과 없음';
       countEl.className = 'col-search-count no-result';
-    } else {
-      countEl.textContent = `${matchedTables}개 테이블 · ${matchedCols}개 컬럼`;
-      countEl.className = 'col-search-count';
+      exitSearchMode();
+      return;
     }
+
+    countEl.textContent = `${matchingCards.length}개 테이블`;
+    countEl.className = 'col-search-count';
+    enterSearchMode(matchingCards, query.trim());
   }
 
   input.addEventListener('input', () => applySearch(input.value));
@@ -3132,12 +3222,14 @@ function clearAllHighlights() {
     input.focus();
   });
 
-  // focus mode 진입/복귀 시 검색 자동 초기화
-  const _exit = window.exitFocusMode;
-  window.exitFocusMode = function() {
-    _exit && _exit();
-    // focus mode 나올 때 검색 결과 유지 (사용자가 원하면 다시 검색)
-  };
+  // focus mode 진입 시 검색 초기화
+  const _handleColClick = window.handleColClick;
+  document.addEventListener('focusmode:enter', () => {
+    if (searchActive) {
+      input.value = '';
+      applySearch('');
+    }
+  });
 })();
 
 function dimAllExcept(tableNames) {
