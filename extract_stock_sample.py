@@ -245,7 +245,10 @@ QUERIES = {
             ob.created_at,
             ob.updated_at,
             ob.receiver_country,
+            ob.receiving_type,
             ob.delivery_fee,
+            ob.base_currency_delivery_fee,
+            ob.bundle_delivery_group_id,
             ob.delivery_fee_currency
         FROM {SCHEMA}.order_bundle_ro ob
         INNER JOIN (
@@ -254,6 +257,8 @@ QUERIES = {
             WHERE ref_type = 'ORDER_BUNDLE'
               AND date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
         ) og ON ob.id = og.ref_id
+        WHERE date(date_parse(log_date, '%Y%m%d')) BETWEEN date_add('day', -1, date('{START_DATE}')) AND date_add('day', 1, date('{END_DATE}'))
+          AND date(ob.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
     """,
 
     # 주문 헤더: order_bundle_ro.order_id 기준
@@ -266,6 +271,8 @@ QUERIES = {
             o.status,
             o.payment_amount,
             o.payment_currency,
+            o.base_currency_payment_amount,
+            o.exchange_rates,
             o.base_currency,
             o.device,
             o.user_id
@@ -280,6 +287,7 @@ QUERIES = {
                   AND date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
             ) og ON ob.id = og.ref_id
         ) ob ON o.id = ob.order_id
+        WHERE date(date_parse(log_date, '%Y%m%d')) BETWEEN date_add('day', -1, date('{START_DATE}')) AND date_add('day', 1, date('{END_DATE}'))
     """,
 
     # 주문 라인: order_bundle_ro 기준 (sku_id, 수량, 금액)
@@ -287,11 +295,15 @@ QUERIES = {
         SELECT
             ol.id,
             ol.order_bundle_id,
+            ol.order_product_id,
+            ol.product_item_id,
             ol.sku_id,
             ol.quantity,
             ol.amount,
+            ol.base_currency_amount,
             ol.base_currency,
             ol.option_name,
+            ol.product_item_type,
             ol.created_at,
             ol.updated_at
         FROM {SCHEMA}.order_line_ro ol
@@ -305,7 +317,8 @@ QUERIES = {
                   AND date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
             ) og ON ob.id = og.ref_id
         ) ob ON ol.order_bundle_id = ob.id
-        WHERE date(ol.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+        WHERE date(date_parse(log_date, '%Y%m%d')) BETWEEN date_add('day', -1, date('{START_DATE}')) AND date_add('day', 1, date('{END_DATE}'))
+          AND date(ol.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
     """,
 
     # SKU 그룹: stock_usage_ro 기준 SKU의 그룹만
