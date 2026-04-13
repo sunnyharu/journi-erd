@@ -171,17 +171,14 @@ QUERIES = {
             s.usage_type,
             s.deleted_at
         FROM {SCHEMA}.sku_ro s
-        WHERE (
-            s.id IN (
-                SELECT DISTINCT sku_id
-                FROM {SCHEMA}.stock_usage_ro
-                WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
-                UNION
-                SELECT DISTINCT sku_id
-                FROM {SCHEMA}.bundled_sku_ro
-            )
+        WHERE s.id IN (
+            SELECT DISTINCT sku_id
+            FROM {SCHEMA}.stock_usage_ro
+            WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+            UNION
+            SELECT DISTINCT sku_id
+            FROM {SCHEMA}.bundled_sku_ro
         )
-        AND (s._hoodie_is_deleted = false OR s._hoodie_is_deleted IS NULL OR s._hoodie_is_deleted = true)
     """,
 
     # 배송 헤더: 기간 내 outgoing_ro와 연결된 배송
