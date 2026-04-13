@@ -95,40 +95,19 @@ delivery_agg = (
     .rename(columns={"quantity":"배송완료수량"})
 )
 
-# ── 5. BOM 전개 소요수량 (bundled_sku_ro + delivery_ro COMPLETED) ────────────
+# ── 5. BOM 전개 소요수량 (stock_usage_ro OUTGOING_COMPLETED 기준) ─────────────
+# 완제품 레벨 재고 이동 없이 구성요소 레벨에서만 차감 발생하는 구조
 bom_finished  = set(bom["sku_id"])
 bom_component = set(bom["bundled_sku_id"])
 
-# 경로 A: 완제품이 배송 → 구성요소 소요 = 배송수량 × BOM단위수량
-dl_done  = dl[dl["status"] == "COMPLETED"][["id"]].rename(columns={"id":"delivery_id"})
-dli_done = dli.merge(dl_done, on="delivery_id", how="inner")
-
-path_a = (
-    dli_done[dli_done["sku_id"].isin(bom_finished)]
-    .merge(bom, left_on="sku_id", right_on="sku_id", how="inner")
-)
-path_a["bom_소요"] = path_a["quantity_x"] * path_a["quantity_y"]
-path_a_agg = (
-    path_a.groupby("bundled_sku_id")["bom_소요"]
-    .sum()
-    .reset_index()
-    .rename(columns={"bundled_sku_id":"sku_id", "bom_소요":"BOM전개소요수량"})
-)
-
-# 경로 B: 구성요소 SKU가 직접 배송
-path_b_agg = (
-    dli_done[dli_done["sku_id"].isin(bom_component)]
-    .groupby("sku_id")["quantity"]
-    .sum()
-    .reset_index()
-    .rename(columns={"quantity":"BOM전개소요수량"})
-)
-
+su["delta"] = pd.to_numeric(su["delta"])
 bom_req = (
-    pd.concat([path_a_agg, path_b_agg], ignore_index=True)
-    .groupby("sku_id")["BOM전개소요수량"]
+    su[(su["sku_id"].isin(bom_component)) & (su["type"] == "OUTGOING_COMPLETED")]
+    .groupby("sku_id")["delta"]
     .sum()
+    .abs()
     .reset_index()
+    .rename(columns={"delta": "BOM전개소요수량"})
 )
 bom_req["BOM전개소요수량"] = bom_req["BOM전개소요수량"].astype(int)
 

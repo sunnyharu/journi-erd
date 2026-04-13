@@ -128,39 +128,16 @@ bom_type AS (
     GROUP BY bundled_sku_id
 ),
 
--- BOM 전개 소요수량 (delivery_ro COMPLETED 기준)
--- 경로 A: 완제품이 배송된 경우 → 구성요소 소요 = 배송수량 × BOM단위수량
--- 경로 B: 구성요소가 직접 배송된 경우 → 소요 = 배송수량
-bom_requirement AS (
-    -- 경로 A
-    SELECT
-        b.bundled_sku_id            AS sku_id,
-        SUM(di.quantity * b.quantity) AS bom_소요수량
-    FROM ods_commerce_production.delivery_item_ro di
-    JOIN ods_commerce_production.delivery_ro d ON di.delivery_id = d.id
-    JOIN ods_commerce_production.bundled_sku_ro b ON di.sku_id = b.sku_id
-    WHERE d.status = 'COMPLETED'
-      AND DATE(d.updated_at AT TIME ZONE 'Asia/Seoul') BETWEEN '{{시작일}}' AND '{{종료일}}'
-    GROUP BY b.bundled_sku_id
-
-    UNION ALL
-
-    -- 경로 B: 구성요소 SKU가 delivery_item에 직접 있는 경우
-    SELECT
-        di.sku_id,
-        SUM(di.quantity)            AS bom_소요수량
-    FROM ods_commerce_production.delivery_item_ro di
-    JOIN ods_commerce_production.delivery_ro d ON di.delivery_id = d.id
-    WHERE d.status = 'COMPLETED'
-      AND DATE(d.updated_at AT TIME ZONE 'Asia/Seoul') BETWEEN '{{시작일}}' AND '{{종료일}}'
-      AND di.sku_id IN (SELECT bundled_sku_id FROM ods_commerce_production.bundled_sku_ro)
-    GROUP BY di.sku_id
-),
-
+-- BOM 전개 소요수량 (stock_usage_ro OUTGOING_COMPLETED 기준)
+-- 완제품 레벨 재고 이동 없이 구성요소 레벨에서만 차감이 발생하는 구조
 bom_req_agg AS (
-    SELECT sku_id, SUM(bom_소요수량) AS BOM전개소요수량
-    FROM bom_requirement
-    GROUP BY sku_id
+    SELECT
+        su.sku_id,
+        SUM(ABS(su.delta)) AS BOM전개소요수량
+    FROM su
+    WHERE su.type = 'OUTGOING_COMPLETED'
+      AND su.sku_id IN (SELECT bundled_sku_id FROM ods_commerce_production.bundled_sku_ro)
+    GROUP BY su.sku_id
 )
 
 SELECT
