@@ -1,6 +1,6 @@
 """
 재고수불부 검증 스크립트 (BOM 정교화 포함)
-stock_sample_v3.xlsx를 읽어 재고수불부 + BOM 전개 수량을 계산.
+stock_sample.xlsx를 읽어 재고수불부 + BOM 전개 수량을 계산.
 
 BOM 로직 (bundled_sku_ro):
   - bundled_sku_ro.sku_id        = BOM 완제품 SKU
@@ -20,7 +20,7 @@ import pandas as pd
 from pathlib import Path
 
 BASE_DIR    = Path(__file__).parent
-INPUT_FILE  = BASE_DIR / "stock_sample_v3.xlsx"
+INPUT_FILE  = BASE_DIR / "stock_sample.xlsx"
 OUTPUT_FILE = BASE_DIR / "stock_ledger_result.xlsx"
 
 # ── 1. 데이터 로드 ────────────────────────────────────────────────────────────

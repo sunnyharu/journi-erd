@@ -17,7 +17,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.formatting.rule import ColorScaleRule, CellIsRule
 
 BASE_DIR    = Path(__file__).parent
-INPUT_FILE  = BASE_DIR / "stock_sample_v3.xlsx"
+INPUT_FILE  = BASE_DIR / "stock_sample.xlsx"
 OUTPUT_FILE = BASE_DIR / "sku_dashboard.xlsx"
 
 # ── 1. 데이터 로드 ────────────────────────────────────────────
