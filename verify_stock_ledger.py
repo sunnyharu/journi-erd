@@ -259,34 +259,34 @@ for k, v in bom_counts.items():
     print(f"  {k}: {v}개 SKU")
 
 print("\n[일별 요약]")
-summary = result.groupby("dt").agg(
+# BOM완제품 제외 (실물재고 없음) 후 활동 SKU 기준 단순 집계
+real = result[result["BOM유형"] != "BOM완제품"].copy()
+for c in ["기초재고","입고수량","조정수량","출고완료","출고요청","출고취소","순변동","기말재고"]:
+    real[c] = pd.to_numeric(real[c])
+
+summary = real.groupby("dt").agg(
     활동SKU수=("sku_id", "nunique"),
+    기초재고합계=("기초재고", "sum"),
     입고합계=("입고수량", "sum"),
     조정합계=("조정수량", "sum"),
     출고완료합계=("출고완료", "sum"),
     출고요청합계=("출고요청", "sum"),
     출고취소합계=("출고취소", "sum"),
     순변동합계=("순변동", "sum"),
+    기말재고합계=("기말재고", "sum"),
 ).reset_index()
 
-closing_pivot = stock_bounds.pivot(index="sku_id", columns="dt", values="기말재고")
-closing_ffill = closing_pivot.ffill(axis=1)
-closing_total = closing_ffill.sum(axis=0).rename("기말재고합계_이월포함").reset_index()
-closing_total.columns = ["dt", "기말재고합계_이월포함"]
-closing_total["기말재고합계_이월포함"] = closing_total["기말재고합계_이월포함"].astype(int)
+# 검증: 기초재고합계 + 순변동합계 = 기말재고합계
+summary["검증(기초+순변동-기말)"] = (
+    summary["기초재고합계"] + summary["순변동합계"] - summary["기말재고합계"]
+)
 
-prev_closing = closing_ffill.shift(1, axis=1)
-opening_total_ffill = prev_closing.sum(axis=0).reset_index()
-opening_total_ffill.columns = ["dt", "기초재고합계_이월포함"]
-opening_total_ffill["기초재고합계_이월포함"] = opening_total_ffill["기초재고합계_이월포함"].fillna(0).astype(int)
-
-summary = (
-    summary
-    .merge(closing_total, on="dt", how="left")
-    .merge(opening_total_ffill, on="dt", how="left")
-)[["dt", "활동SKU수", "기초재고합계_이월포함",
-   "입고합계", "조정합계", "출고완료합계", "출고요청합계", "출고취소합계",
-   "순변동합계", "기말재고합계_이월포함"]]
+summary = summary[[
+    "dt", "활동SKU수",
+    "기초재고합계", "입고합계", "조정합계",
+    "출고완료합계", "출고요청합계", "출고취소합계",
+    "순변동합계", "기말재고합계", "검증(기초+순변동-기말)"
+]]
 print(summary.to_string(index=False))
 
 print("\n[상위 10행 미리보기]")
