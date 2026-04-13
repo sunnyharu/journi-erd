@@ -4,10 +4,9 @@
 -- 파라미터: {{시작일}}, {{종료일}} (예: 2026-03-23, 2026-03-29)
 --
 -- [날짜 컬럼 규칙]
--- stock_usage_ro: created_at (Hudi 파티션 키, WHERE 필터용)
---                 updated_at (비즈니스 이벤트 시각, dt 집계 기준)
--- WHERE 절 : DATE(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
--- GROUP BY : DATE(updated_at AT TIME ZONE 'Asia/Seoul') AS dt
+-- stock_usage_ro: _at 컬럼은 updated_at 하나뿐 (샘플 데이터 확인 기준)
+-- WHERE 절 : DATE(updated_at AT TIME ZONE 'Asia/Seoul') BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
+-- dt alias : DATE(updated_at AT TIME ZONE 'Asia/Seoul') AS dt
 --
 -- [주요 로직]
 -- 기초재고/기말재고: 체인 집합 방식 (LEFT JOIN anti-join)
@@ -37,7 +36,7 @@ su AS (
         delta,
         updated_at
     FROM ods_commerce_production.stock_usage_ro
-    WHERE DATE(created_at AT TIME ZONE 'Asia/Seoul')
+    WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul')
           BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
 ),
 
@@ -205,7 +204,7 @@ su AS (
         after_quantity,
         delta
     FROM ods_commerce_production.stock_usage_ro
-    WHERE DATE(created_at AT TIME ZONE 'Asia/Seoul')
+    WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul')
           BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
 ),
 
@@ -310,7 +309,7 @@ su AS (
         delta,
         updated_at
     FROM ods_commerce_production.stock_usage_ro
-    WHERE DATE(created_at AT TIME ZONE 'Asia/Seoul')
+    WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul')
           BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
       AND sku_id = CAST('{{sku_id}}' AS BIGINT)
 ),
