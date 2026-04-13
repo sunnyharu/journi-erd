@@ -3,6 +3,12 @@
 -- DB: Presto / ods_commerce_production
 -- 파라미터: {{시작일}}, {{종료일}} (예: 2026-03-23, 2026-03-29)
 --
+-- [날짜 컬럼 규칙]
+-- stock_usage_ro: created_at (Hudi 파티션 키, WHERE 필터용)
+--                 updated_at (비즈니스 이벤트 시각, dt 집계 기준)
+-- WHERE 절 : DATE(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
+-- GROUP BY : DATE(updated_at AT TIME ZONE 'Asia/Seoul') AS dt
+--
 -- [주요 로직]
 -- 기초재고/기말재고: 체인 집합 방식 (LEFT JOIN anti-join)
 --   - before_quantity 중 어떤 이벤트의 after_quantity에도 없는 값 → 기초재고
@@ -31,7 +37,8 @@ su AS (
         delta,
         updated_at
     FROM ods_commerce_production.stock_usage_ro
-    WHERE dt BETWEEN '{{시작일}}' AND '{{종료일}}'
+    WHERE DATE(created_at AT TIME ZONE 'Asia/Seoul')
+          BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
 ),
 
 -- 기초재고: before_quantity 중 동일 (dt, sku_id, stock_id) 내 after_quantity에 없는 값
@@ -47,8 +54,8 @@ opening AS (
         ON  s1.dt       = s2.dt
         AND s1.sku_id   = s2.sku_id
         AND s1.stock_id = s2.stock_id
-        AND s1.before_quantity = s2.after_quantity   -- 체인 연결 시도
-    WHERE s2.sku_id IS NULL                          -- 연결 안 됨 = 체인 시작점
+        AND s1.before_quantity = s2.after_quantity
+    WHERE s2.sku_id IS NULL
     GROUP BY s1.dt, s1.sku_id, s1.stock_id
 ),
 
@@ -65,8 +72,8 @@ closing AS (
         ON  s1.dt       = s2.dt
         AND s1.sku_id   = s2.sku_id
         AND s1.stock_id = s2.stock_id
-        AND s1.after_quantity = s2.before_quantity   -- 체인 연결 시도
-    WHERE s2.sku_id IS NULL                          -- 연결 안 됨 = 체인 끝점
+        AND s1.after_quantity = s2.before_quantity
+    WHERE s2.sku_id IS NULL
     GROUP BY s1.dt, s1.sku_id, s1.stock_id
 ),
 
@@ -198,7 +205,8 @@ su AS (
         after_quantity,
         delta
     FROM ods_commerce_production.stock_usage_ro
-    WHERE dt BETWEEN '{{시작일}}' AND '{{종료일}}'
+    WHERE DATE(created_at AT TIME ZONE 'Asia/Seoul')
+          BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
 ),
 
 opening AS (
@@ -302,7 +310,8 @@ su AS (
         delta,
         updated_at
     FROM ods_commerce_production.stock_usage_ro
-    WHERE dt BETWEEN '{{시작일}}' AND '{{종료일}}'
+    WHERE DATE(created_at AT TIME ZONE 'Asia/Seoul')
+          BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
       AND sku_id = CAST('{{sku_id}}' AS BIGINT)
 ),
 
