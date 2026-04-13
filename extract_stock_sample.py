@@ -171,18 +171,20 @@ QUERIES = {
             s.usage_type,
             s.deleted_at
         FROM {SCHEMA}.sku_ro s
-        WHERE s.deleted_at IS NULL
-          AND (
-              -- stock_usage_ro에 등장한 SKU (생성일 무관하게 포함)
+        WHERE (
+              -- stock_usage_ro에 등장한 SKU: 삭제 여부 무관하게 포함 (재고 이력이 있으면 표시)
               s.id IN (
                   SELECT DISTINCT sku_id
                   FROM {SCHEMA}.stock_usage_ro
                   WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
               )
-              -- BOM 완제품 SKU (stock_usage_ro에 직접 등장하지 않아 별도 포함)
-              OR s.id IN (
-                  SELECT DISTINCT sku_id
-                  FROM {SCHEMA}.bundled_sku_ro
+              -- BOM 완제품 SKU: 삭제되지 않은 것만
+              OR (
+                  s.deleted_at IS NULL
+                  AND s.id IN (
+                      SELECT DISTINCT sku_id
+                      FROM {SCHEMA}.bundled_sku_ro
+                  )
               )
           )
     """,
