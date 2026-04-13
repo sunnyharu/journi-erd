@@ -1,8 +1,7 @@
 import prestodb
 import pandas as pd
-import os
 
-# 접속 설정
+# ===== [셀 1] 접속 설정 =====
 conn = prestodb.dbapi.connect(
     host='presto-adhoc.ka.io',
     port=8443,
@@ -14,15 +13,15 @@ conn = prestodb.dbapi.connect(
 )
 cur = conn.cursor()
 
-# ===== 설정값 =====
 SCHEMA      = 'ods_commerce_production'
 START_DATE  = '2026-03-23'
 END_DATE    = '2026-03-29'
 SKU_START   = '2025-11-20'
 OUTPUT_FILE = './stock_sample.xlsx'
-# =================
 
-# ===== 테이블별 쿼리 정의 =====
+print(f"✅ 접속 완료 | 기간: {START_DATE} ~ {END_DATE}")
+
+# ===== [셀 2] 쿼리 정의 =====
 QUERIES = {
 
     # 재고 변동 이력
@@ -346,7 +345,9 @@ QUERIES = {
     """,
 }
 
-# ===== 실행 및 엑셀 저장 =====
+print(f"✅ 쿼리 정의 완료 | 총 {len(QUERIES)}개 테이블")
+
+# ===== [셀 3] 실행 및 엑셀 저장 =====
 with pd.ExcelWriter(OUTPUT_FILE, engine='openpyxl') as writer:
     for table, sql in QUERIES.items():
         try:
@@ -356,7 +357,7 @@ with pd.ExcelWriter(OUTPUT_FILE, engine='openpyxl') as writer:
             cols = [d[0] for d in cur.description]
             df   = pd.DataFrame(rows, columns=cols)
             df.to_excel(writer, sheet_name=table[:31], index=False)
-            print(f"[{table}] {len(df)}행 저장 완료")
+            print(f"[{table}] {len(df):,}행 저장 완료")
         except Exception as e:
             print(f"[{table}] ❌ 실패: {e}")
 
