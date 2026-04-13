@@ -342,19 +342,6 @@ QUERIES = {
             g.code_name,
             g.deleted_at
         FROM {SCHEMA}.sku_group_ro g
-        WHERE date(g.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{SKU_START}') AND date('{END_DATE}')
-          AND g.deleted_at IS NULL
-          AND g.id IN (
-              SELECT DISTINCT s.sku_group_id
-              FROM {SCHEMA}.sku_ro s
-              WHERE date(s.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{SKU_START}') AND date('{END_DATE}')
-                AND s.deleted_at IS NULL
-                AND s.id IN (
-                    SELECT DISTINCT sku_id
-                    FROM {SCHEMA}.stock_usage_ro
-                    WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
-                )
-          )
     """,
 }
 
