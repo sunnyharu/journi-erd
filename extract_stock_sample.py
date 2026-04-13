@@ -173,10 +173,18 @@ QUERIES = {
         FROM {SCHEMA}.sku_ro s
         WHERE date(s.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{SKU_START}') AND date('{END_DATE}')
           AND s.deleted_at IS NULL
-          AND s.id IN (
-              SELECT DISTINCT sku_id
-              FROM {SCHEMA}.stock_usage_ro
-              WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+          AND (
+              -- 기존: stock_usage_ro에 등장한 SKU
+              s.id IN (
+                  SELECT DISTINCT sku_id
+                  FROM {SCHEMA}.stock_usage_ro
+                  WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+              )
+              -- 추가: BOM 완제품 SKU (stock_usage_ro에 직접 등장하지 않아 별도 포함)
+              OR s.id IN (
+                  SELECT DISTINCT sku_id
+                  FROM {SCHEMA}.bundled_sku_ro
+              )
           )
     """,
 
