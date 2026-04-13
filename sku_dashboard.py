@@ -1,7 +1,7 @@
 """
 SKU 통합 현황 대시보드
 ─────────────────────────────────────────────────────────────────
-재고 가용 현황 + 출고 이행률 + 기간 재고 변동을 SKU 기준으로 통합.
+재고 가용 현황 + 출고 이행률 + 기간 재고 변동 + 주문/배송을 SKU 기준으로 통합.
 
 시트 구성:
   Sheet1. 전체현황   — 전체 SKU 통합 뷰
@@ -17,7 +17,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.formatting.rule import ColorScaleRule, CellIsRule
 
 BASE_DIR    = Path(__file__).parent
-INPUT_FILE  = BASE_DIR / "stock_sample.xlsx"
+INPUT_FILE  = BASE_DIR / "stock_sample_v3.xlsx"
 OUTPUT_FILE = BASE_DIR / "sku_dashboard.xlsx"
 
 # ── 1. 데이터 로드 ────────────────────────────────────────────
@@ -28,12 +28,18 @@ stock   = xl["stock_ro"].copy()
 og      = xl["outgoing_ro"].copy()
 ogi     = xl["outgoing_item_ro"].copy()
 su      = xl["stock_usage_ro"].copy()
+dl      = xl["delivery_ro"].copy()
+dli     = xl["delivery_item_ro"].copy()
+ol      = xl["order_line_ro"].copy()
 
 for col in ["physical_quantity","available_quantity","reserved_quantity"]:
     stock[col] = pd.to_numeric(stock[col])
 ogi["quantity"]          = pd.to_numeric(ogi["quantity"])
 ogi["outgoing_quantity"] = pd.to_numeric(ogi["outgoing_quantity"]).fillna(0)
 su["delta"]              = pd.to_numeric(su["delta"])
+dli["quantity"]          = pd.to_numeric(dli["quantity"])
+ol["quantity"]           = pd.to_numeric(ol["quantity"])
+ol["base_currency_amount"] = pd.to_numeric(ol["base_currency_amount"])
 
 # ── 2. 재고 가용 현황 (stock_ro) ──────────────────────────────
 stock_agg = (
@@ -66,7 +72,28 @@ status_agg = (
     .rename(columns={"status":"미처리사유"})
 )
 
-# ── 4. 기간 재고 변동 (stock_usage_ro) ───────────────────────
+# ── 4. 주문/배송 (order_line_ro, delivery_item_ro) ────────────
+
+# 주문수량 + 주문금액 (order_line_ro 기준)
+order_agg = (
+    ol.groupby("sku_id")
+    .agg(주문수량=("quantity","sum"),
+         주문금액=("base_currency_amount","sum"))
+    .reset_index()
+)
+order_agg["주문금액"] = order_agg["주문금액"].round(0).astype(int)
+
+# 배송완료수량 (delivery_ro.status='COMPLETED' 기준)
+dl_done = dl[dl["status"] == "COMPLETED"][["id"]].rename(columns={"id":"delivery_id"})
+dli_done = dli.merge(dl_done, on="delivery_id", how="inner")
+delivery_agg = (
+    dli_done.groupby("sku_id")["quantity"]
+    .sum()
+    .reset_index()
+    .rename(columns={"quantity":"배송완료수량"})
+)
+
+# ── 5. 기간 재고 변동 (stock_usage_ro) ───────────────────────
 def sum_type(df, t, col):
     return (df[df["type"]==t].groupby("sku_id")["delta"].sum()
             .reset_index().rename(columns={"delta":col}))
@@ -75,7 +102,7 @@ incoming_agg   = sum_type(su, "INCOMING_COMPLETED",   "기간_입고")
 outgoing_c_agg = sum_type(su, "OUTGOING_COMPLETED",   "기간_출고완료")
 adjust_agg     = sum_type(su, "ADJUSTMENT_COMPLETED", "기간_조정")
 
-# ── 5. SKU 마스터 ──────────────────────────────────────────────
+# ── 6. SKU 마스터 ──────────────────────────────────────────────
 sku_info = (
     sku[sku["deleted_at"].isna()][["id","name","sku_code","composition_type","sku_group_id"]]
     .rename(columns={"id":"sku_id","name":"sku_nm"})
@@ -84,15 +111,17 @@ sku_info = (
     .drop(columns=["id","sku_group_id"])
 )
 
-# ── 6. 통합 조인 ──────────────────────────────────────────────
+# ── 7. 통합 조인 ──────────────────────────────────────────────
 base = sku_info.copy()
 for df in [stock_agg, outgoing_agg, status_agg,
-           incoming_agg, outgoing_c_agg, adjust_agg]:
+           incoming_agg, outgoing_c_agg, adjust_agg,
+           order_agg, delivery_agg]:
     base = base.merge(df, on="sku_id", how="left")
 
 num_cols = ["물리재고","가용재고","예약재고",
             "출고지시수량","실출고수량","미처리수량",
-            "기간_입고","기간_출고완료","기간_조정"]
+            "기간_입고","기간_출고완료","기간_조정",
+            "주문수량","주문금액","배송완료수량"]
 base[num_cols] = base[num_cols].fillna(0).astype(int)
 base["이행률(%)"] = base["이행률(%)"].fillna(0)
 base["미처리사유"] = base["미처리사유"].fillna("")
@@ -113,7 +142,8 @@ COLS = [
     "sku_id","sku_nm","sku_code","biz_partner_id","composition_type","상태",
     "물리재고","가용재고","예약재고",
     "출고지시수량","실출고수량","미처리수량","이행률(%)","미처리사유",
-    "기간_입고","기간_출고완료","기간_조정"
+    "기간_입고","기간_출고완료","기간_조정",
+    "주문수량","주문금액","배송완료수량"
 ]
 base = base[COLS].sort_values(["biz_partner_id","미처리수량"], ascending=[True,False])
 
@@ -141,15 +171,19 @@ COL_HEADERS = {
     "기간_입고":   ("기간입고",   10),
     "기간_출고완료":("기간출고",  10),
     "기간_조정":   ("기간조정",   10),
+    "주문수량":    ("주문수량",   10),
+    "주문금액":    ("주문금액(₩)", 14),
+    "배송완료수량":("배송완료",   10),
 }
 
-NUM_COLS_IDX = {7,8,9,10,11,12,15,16,17}  # 1-based (G~M, O~Q)
+NUM_COLS_IDX = {7,8,9,10,11,12,15,16,17,18,19,20}  # 1-based (G~M, O~Q, R~T)
 
 # 헤더 스타일 색상
 HEADER_COLORS = {
     "재고가용":  "1F4E79",  # 진파랑  (물리/가용/예약)
     "출고이행":  "833C00",  # 진갈색  (지시/실출고/미처리/이행률/사유)
     "재고변동":  "375623",  # 진녹색  (입고/출고완료/조정)
+    "주문배송":  "4B2D8B",  # 진보라  (주문수량/금액/배송완료)
     "기본":      "2F5496",  # 기본파랑
 }
 SECTION_MAP = {
@@ -157,6 +191,7 @@ SECTION_MAP = {
     "출고지시수량":"출고이행","실출고수량":"출고이행","미처리수량":"출고이행",
     "이행률(%)":"출고이행","미처리사유":"출고이행",
     "기간_입고":"재고변동","기간_출고완료":"재고변동","기간_조정":"재고변동",
+    "주문수량":"주문배송","주문금액":"주문배송","배송완료수량":"주문배송",
 }
 
 ROW_FILLS = {
