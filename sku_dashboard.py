@@ -31,6 +31,7 @@ su      = xl["stock_usage_ro"].copy()
 dl      = xl["delivery_ro"].copy()
 dli     = xl["delivery_item_ro"].copy()
 ol      = xl["order_line_ro"].copy()
+bom     = xl["bundled_sku_ro"].copy()
 
 for col in ["physical_quantity","available_quantity","reserved_quantity"]:
     stock[col] = pd.to_numeric(stock[col])
@@ -40,6 +41,7 @@ su["delta"]              = pd.to_numeric(su["delta"])
 dli["quantity"]          = pd.to_numeric(dli["quantity"])
 ol["quantity"]           = pd.to_numeric(ol["quantity"])
 ol["base_currency_amount"] = pd.to_numeric(ol["base_currency_amount"])
+bom["quantity"]          = pd.to_numeric(bom["quantity"])
 
 # ── 2. 재고 가용 현황 (stock_ro) ──────────────────────────────
 stock_agg = (
@@ -93,7 +95,44 @@ delivery_agg = (
     .rename(columns={"quantity":"배송완료수량"})
 )
 
-# ── 5. 기간 재고 변동 (stock_usage_ro) ───────────────────────
+# ── 5. BOM 전개 소요수량 (bundled_sku_ro + delivery_ro COMPLETED) ────────────
+bom_finished  = set(bom["sku_id"])
+bom_component = set(bom["bundled_sku_id"])
+
+# 경로 A: 완제품이 배송 → 구성요소 소요 = 배송수량 × BOM단위수량
+dl_done  = dl[dl["status"] == "COMPLETED"][["id"]].rename(columns={"id":"delivery_id"})
+dli_done = dli.merge(dl_done, on="delivery_id", how="inner")
+
+path_a = (
+    dli_done[dli_done["sku_id"].isin(bom_finished)]
+    .merge(bom, left_on="sku_id", right_on="sku_id", how="inner")
+)
+path_a["bom_소요"] = path_a["quantity_x"] * path_a["quantity_y"]
+path_a_agg = (
+    path_a.groupby("bundled_sku_id")["bom_소요"]
+    .sum()
+    .reset_index()
+    .rename(columns={"bundled_sku_id":"sku_id", "bom_소요":"BOM전개소요수량"})
+)
+
+# 경로 B: 구성요소 SKU가 직접 배송
+path_b_agg = (
+    dli_done[dli_done["sku_id"].isin(bom_component)]
+    .groupby("sku_id")["quantity"]
+    .sum()
+    .reset_index()
+    .rename(columns={"quantity":"BOM전개소요수량"})
+)
+
+bom_req = (
+    pd.concat([path_a_agg, path_b_agg], ignore_index=True)
+    .groupby("sku_id")["BOM전개소요수량"]
+    .sum()
+    .reset_index()
+)
+bom_req["BOM전개소요수량"] = bom_req["BOM전개소요수량"].astype(int)
+
+# ── 6. 기간 재고 변동 (stock_usage_ro) ───────────────────────
 def sum_type(df, t, col):
     return (df[df["type"]==t].groupby("sku_id")["delta"].sum()
             .reset_index().rename(columns={"delta":col}))
@@ -102,7 +141,14 @@ incoming_agg   = sum_type(su, "INCOMING_COMPLETED",   "기간_입고")
 outgoing_c_agg = sum_type(su, "OUTGOING_COMPLETED",   "기간_출고완료")
 adjust_agg     = sum_type(su, "ADJUSTMENT_COMPLETED", "기간_조정")
 
-# ── 6. SKU 마스터 ──────────────────────────────────────────────
+# ── 7. SKU 마스터 ──────────────────────────────────────────────
+def classify_bom(sku_id):
+    if sku_id in bom_finished:
+        return "BOM완제품"
+    elif sku_id in bom_component:
+        return "BOM구성요소"
+    return "SINGLE"
+
 sku_info = (
     sku[sku["deleted_at"].isna()][["id","name","sku_code","composition_type","sku_group_id"]]
     .rename(columns={"id":"sku_id","name":"sku_nm"})
@@ -110,18 +156,19 @@ sku_info = (
            left_on="sku_group_id", right_on="id", how="left")
     .drop(columns=["id","sku_group_id"])
 )
+sku_info["BOM유형"] = sku_info["sku_id"].apply(classify_bom)
 
-# ── 7. 통합 조인 ──────────────────────────────────────────────
+# ── 8. 통합 조인 ──────────────────────────────────────────────
 base = sku_info.copy()
 for df in [stock_agg, outgoing_agg, status_agg,
            incoming_agg, outgoing_c_agg, adjust_agg,
-           order_agg, delivery_agg]:
+           order_agg, delivery_agg, bom_req]:
     base = base.merge(df, on="sku_id", how="left")
 
 num_cols = ["물리재고","가용재고","예약재고",
             "출고지시수량","실출고수량","미처리수량",
             "기간_입고","기간_출고완료","기간_조정",
-            "주문수량","주문금액","배송완료수량"]
+            "주문수량","주문금액","배송완료수량","BOM전개소요수량"]
 base[num_cols] = base[num_cols].fillna(0).astype(int)
 base["이행률(%)"] = base["이행률(%)"].fillna(0)
 base["미처리사유"] = base["미처리사유"].fillna("")
@@ -139,11 +186,11 @@ def flag(r):
 base["상태"] = base.apply(flag, axis=1)
 
 COLS = [
-    "sku_id","sku_nm","sku_code","biz_partner_id","composition_type","상태",
+    "sku_id","sku_nm","sku_code","biz_partner_id","composition_type","BOM유형","상태",
     "물리재고","가용재고","예약재고",
     "출고지시수량","실출고수량","미처리수량","이행률(%)","미처리사유",
     "기간_입고","기간_출고완료","기간_조정",
-    "주문수량","주문금액","배송완료수량"
+    "주문수량","주문금액","배송완료수량","BOM전개소요수량"
 ]
 base = base[COLS].sort_values(["biz_partner_id","미처리수량"], ascending=[True,False])
 
@@ -159,6 +206,7 @@ COL_HEADERS = {
     "sku_code":     ("SKU코드",   18),
     "biz_partner_id":("거래처ID", 18),
     "composition_type":("구성유형",12),
+    "BOM유형":      ("BOM유형",    14),
     "상태":         ("상태",       12),
     "물리재고":     ("물리재고",   10),
     "가용재고":     ("가용재고",   10),
@@ -174,9 +222,10 @@ COL_HEADERS = {
     "주문수량":    ("주문수량",   10),
     "주문금액":    ("주문금액(₩)", 14),
     "배송완료수량":("배송완료",   10),
+    "BOM전개소요수량":("BOM소요",  12),
 }
 
-NUM_COLS_IDX = {7,8,9,10,11,12,15,16,17,18,19,20}  # 1-based (G~M, O~Q, R~T)
+NUM_COLS_IDX = {8,9,10,11,12,13,16,17,18,19,20,21,22}  # 1-based (H~N, P~V)
 
 # 헤더 스타일 색상
 HEADER_COLORS = {
@@ -191,7 +240,7 @@ SECTION_MAP = {
     "출고지시수량":"출고이행","실출고수량":"출고이행","미처리수량":"출고이행",
     "이행률(%)":"출고이행","미처리사유":"출고이행",
     "기간_입고":"재고변동","기간_출고완료":"재고변동","기간_조정":"재고변동",
-    "주문수량":"주문배송","주문금액":"주문배송","배송완료수량":"주문배송",
+    "주문수량":"주문배송","주문금액":"주문배송","배송완료수량":"주문배송","BOM전개소요수량":"주문배송",
 }
 
 ROW_FILLS = {
@@ -240,12 +289,12 @@ def write_sheet(ws, df, title):
             if ci in NUM_COLS_IDX and isinstance(val, (int, float)) and col != "이행률(%)":
                 cell.number_format = num_fmt
                 cell.alignment = Alignment(horizontal="right", vertical="center")
-            if ci == 13:  # 이행률
+            if ci == 14:  # 이행률
                 cell.number_format = "0.0"
                 cell.alignment = Alignment(horizontal="right", vertical="center")
             if fill_color:
                 cell.fill = PatternFill("solid", start_color=fill_color)
-    ws.freeze_panes = "G3"
+    ws.freeze_panes = "H3"
 
 SHEETS = [
     ("전체현황",    전체,    "SKU 통합 현황 (재고가용 + 출고이행 + 기간변동)"),
@@ -264,9 +313,13 @@ with pd.ExcelWriter(OUTPUT_FILE, engine="openpyxl") as writer:
             ws[f"{col_letter}3"] = None  # 더미 헤더 제거
         write_sheet(ws, df, title)
 
+bom_counts = base["BOM유형"].value_counts()
 print(f"✅ 저장 완료: {OUTPUT_FILE}")
 print(f"\n[요약]")
 print(f"  전체 SKU:        {len(전체):>5}개")
 print(f"  미처리 출고:      {len(미처리):>5}개 SKU")
 print(f"  ⚠️  재고부족 위험: {len(재고부족):>5}개 SKU")
 print(f"  ✅ 이행 완료:     {len(이행완료):>5}개 SKU")
+print(f"\n[BOM 유형]")
+for k, v in bom_counts.items():
+    print(f"  {k}: {v}개")
