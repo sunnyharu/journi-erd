@@ -165,18 +165,78 @@ result = (
 result["배송완료수량"]   = result["배송완료수량"].fillna(0).astype(int)
 result["BOM전개소요수량"] = result["BOM전개소요수량"].fillna(0).astype(int)
 
-result = result[[
+FINAL_COLS = [
     "dt", "sku_id", "sku_nm", "sku_code", "biz_partner_id", "composition_type", "BOM유형",
     "기초재고", "입고수량", "조정수량", "출고완료", "출고요청", "출고취소", "순변동", "기말재고",
     "배송완료수량", "BOM전개소요수량"
-]].sort_values(["dt", "biz_partner_id", "sku_id"])
+]
+result = result[FINAL_COLS]
+
+# ── 8-1. BOM 완제품 행 추가 ───────────────────────────────────────────────────
+# 고유 구성요소(단 하나의 완제품에만 속한 구성요소) 기반으로 완제품 판매수량 역산
+# 판매수량 = 구성요소 OUTGOING_COMPLETED 절댓값 / bom.quantity
+comp_parent_cnt = bom.groupby("bundled_sku_id")["sku_id"].nunique()
+unique_comps = set(comp_parent_cnt[comp_parent_cnt == 1].index)
+
+bom_unique = bom[bom["bundled_sku_id"].isin(unique_comps)][["sku_id", "bundled_sku_id", "quantity"]]
+
+su_unique = (
+    su[(su["sku_id"].isin(unique_comps)) & (su["type"] == "OUTGOING_COMPLETED")]
+    .groupby(["dt", "sku_id"])["delta"]
+    .sum()
+    .abs()
+    .reset_index()
+    .rename(columns={"sku_id": "bundled_sku_id", "delta": "comp_outgoing"})
+)
+
+finished_sales = (
+    su_unique
+    .merge(bom_unique, on="bundled_sku_id", how="left")
+    .assign(판매수량=lambda x: (x["comp_outgoing"] / x["quantity"]).round(0).astype(int))
+    .groupby(["dt", "sku_id"])["판매수량"]
+    .sum()  # 완제품 1개에 고유 구성요소 여러 개인 경우 합산이 아닌 대표값 필요 → MAX 사용
+    .reset_index()
+)
+# 완제품 1개에 고유 구성요소 2개 이상이면 max(=더 큰 쪽) 사용
+finished_sales = (
+    su_unique
+    .merge(bom_unique, on="bundled_sku_id", how="left")
+    .assign(판매수량=lambda x: (x["comp_outgoing"] / x["quantity"]).round(0).astype(int))
+    .groupby(["dt", "sku_id"])["판매수량"]
+    .max()
+    .reset_index()
+)
+
+# 완제품 sku_info (sku_ro에 없으면 NaN 유지)
+finished_sku_info = (
+    pd.DataFrame({"sku_id": list(bom_finished)})
+    .merge(sku_info, on="sku_id", how="left")
+)
+finished_sku_info["BOM유형"] = "BOM완제품"
+
+# 완제품 행 구성
+finished_rows = finished_sales.merge(finished_sku_info, on="sku_id", how="left")
+finished_rows["출고완료"]     = -finished_rows["판매수량"]
+finished_rows["순변동"]       = -finished_rows["판매수량"]
+for col in ["기초재고", "입고수량", "조정수량", "출고요청", "출고취소", "기말재고",
+            "배송완료수량", "BOM전개소요수량"]:
+    finished_rows[col] = 0
+finished_rows = finished_rows[FINAL_COLS]
+
+# 구성요소 + 완제품 합치기
+result = (
+    pd.concat([result, finished_rows], ignore_index=True)
+    .sort_values(["dt", "biz_partner_id", "BOM유형", "sku_id"],
+                 ascending=[True, True, False, True])  # BOM완제품이 구성요소 위에
+    .reset_index(drop=True)
+)
 
 # ── 9. 검증 출력 ──────────────────────────────────────────────────────────────
 print(f"총 행수: {len(result)}")
 print(f"날짜 범위: {result['dt'].min()} ~ {result['dt'].max()}")
 print(f"고유 SKU 수: {result['sku_id'].nunique()}")
 
-bom_counts = sku_info["BOM유형"].value_counts()
+bom_counts = result.drop_duplicates("sku_id")["BOM유형"].value_counts()
 print(f"\n[BOM 유형 분포]")
 for k, v in bom_counts.items():
     print(f"  {k}: {v}개 SKU")
@@ -215,11 +275,12 @@ print(summary.to_string(index=False))
 print("\n[상위 10행 미리보기]")
 print(result.head(10).to_string(index=False))
 
-# 검증: 기초재고 + 순변동 = 기말재고
-check = result.copy()
-check["계산기말"] = check["기초재고"] + check["순변동"]
+# 검증: 기초재고 + 순변동 = 기말재고 (BOM완제품 제외 — 실물재고 없어 기말=0)
+check = result[result["BOM유형"] != "BOM완제품"].copy()
+check["계산기말"] = pd.to_numeric(check["기초재고"]) + pd.to_numeric(check["순변동"])
+check["기말재고"] = pd.to_numeric(check["기말재고"])
 mismatch = check[check["계산기말"] != check["기말재고"]]
-print(f"\n[검증] 기초재고 + 순변동 = 기말재고 불일치 건수: {len(mismatch)}")
+print(f"\n[검증] 기초재고 + 순변동 = 기말재고 불일치 건수: {len(mismatch)}  (BOM완제품 제외)")
 if len(mismatch) > 0:
     print(mismatch[["dt","sku_id","기초재고","순변동","계산기말","기말재고"]].head(10).to_string(index=False))
 
