@@ -264,26 +264,26 @@ real = result[result["BOM유형"] != "BOM완제품"].copy()
 for c in ["기초재고","입고수량","조정수량","출고완료","출고요청","출고취소","순변동","기말재고"]:
     real[c] = pd.to_numeric(real[c])
 
-# 전일기말 = 당일기초가 되도록 누적 방식 계산
-# - 처음 등장하는 SKU의 기초재고를 전날 기말합계에 더함
+# 전일기말 = 당일기초 완벽 일치 방식
+# - 전체 SKU의 초기재고(처음 등장일 기준 기초재고)를 첫날에 한번에 포함
+# - 비활동 SKU는 순변동=0 → 기말에 자동 유지 → 연속성 보장
 # - 기초 + 순변동 = 기말 (by construction)
+
+# 각 SKU의 초기재고: 처음 활동한 날의 기초재고
+first_opening = (
+    stock_bounds.sort_values("dt")
+    .groupby("sku_id", as_index=False)
+    .first()[["sku_id", "기초재고"]]
+)
+total_initial_stock = int(first_opening["기초재고"].sum())  # 전체 SKU 초기재고 합계
+
 dates = sorted(real["dt"].unique())
-sku_seen = set()
-prev_기말 = None
 summary_rows = []
+기초합계 = total_initial_stock  # 첫날 기초 = 전체 SKU 초기재고 합계
 
 for dt in dates:
     day = real[real["dt"] == dt]
     active_skus = set(day["sku_id"])
-    new_skus = active_skus - sku_seen  # 이날 처음 등장한 SKU
-
-    신규_기초 = int(day[day["sku_id"].isin(new_skus)]["기초재고"].sum())
-
-    if prev_기말 is None:
-        기초합계 = int(day["기초재고"].sum())  # 첫날: 실제 기초재고 그대로
-    else:
-        기초합계 = prev_기말 + 신규_기초     # 다음날: 전날 기말 + 신규 SKU 기초재고
-
     순변동합계 = int(day["순변동"].sum())
     기말합계   = 기초합계 + 순변동합계
 
@@ -299,8 +299,7 @@ for dt in dates:
         "순변동합계":    순변동합계,
         "기말재고합계":  기말합계,
     })
-    prev_기말  = 기말합계
-    sku_seen  |= active_skus
+    기초합계 = 기말합계  # 다음날 기초 = 이날 기말 (전일기말 = 당일기초 보장)
 
 summary = pd.DataFrame(summary_rows)
 summary["검증(기초+순변동-기말)"] = (
