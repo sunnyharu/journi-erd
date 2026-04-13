@@ -33,6 +33,18 @@ bom       = xl["bundled_sku_ro"].copy()
 dl        = xl["delivery_ro"].copy()
 dli       = xl["delivery_item_ro"].copy()
 
+# delivery_item_ro에서 SKU 이름 보완용 매핑 생성
+# (item_name + option_name 조합, sku_ro에 없는 SKU 대상)
+dli_name = (
+    dli[dli["item_name"].notna()][["sku_id","item_name","option_name"]]
+    .drop_duplicates("sku_id")
+    .copy()
+)
+dli_name["sku_nm_fallback"] = dli_name.apply(
+    lambda r: f"{r['item_name']} [{r['option_name']}]"
+    if pd.notna(r.get("option_name")) else r["item_name"], axis=1
+)
+
 su["updated_at"]      = pd.to_datetime(su["updated_at"])
 su["before_quantity"] = pd.to_numeric(su["before_quantity"])
 su["after_quantity"]  = pd.to_numeric(su["after_quantity"])
@@ -164,6 +176,11 @@ result = (
 )
 result["배송완료수량"]   = result["배송완료수량"].fillna(0).astype(int)
 result["BOM전개소요수량"] = result["BOM전개소요수량"].fillna(0).astype(int)
+
+# sku_nm 보완: sku_ro에 없는 SKU → delivery_item_ro.item_name으로 채움
+result = result.merge(dli_name[["sku_id","sku_nm_fallback"]], on="sku_id", how="left")
+result["sku_nm"] = result["sku_nm"].fillna(result["sku_nm_fallback"])
+result.drop(columns=["sku_nm_fallback"], inplace=True)
 
 FINAL_COLS = [
     "dt", "sku_id", "sku_nm", "sku_code", "biz_partner_id", "composition_type", "BOM유형",
