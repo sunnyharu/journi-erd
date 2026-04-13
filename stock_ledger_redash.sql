@@ -8,6 +8,10 @@
 -- WHERE 절 : DATE(updated_at AT TIME ZONE 'Asia/Seoul') BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
 -- dt alias : DATE(updated_at AT TIME ZONE 'Asia/Seoul') AS dt
 --
+-- [Presto 한글 식별자 규칙]
+-- CTE 내부 컬럼명은 영문 사용, 최종 SELECT에서만 한글 alias를 ""로 감쌈
+-- 예) AS "기초재고"  /  'BOM완제품' 같은 문자열 리터럴은 그대로 사용 가능
+--
 -- [주요 로직]
 -- 기초재고/기말재고: 체인 집합 방식 (LEFT JOIN anti-join)
 --   - before_quantity 중 어떤 이벤트의 after_quantity에도 없는 값 → 기초재고
@@ -81,8 +85,8 @@ stock_bounds AS (
     SELECT
         o.dt,
         o.sku_id,
-        SUM(o.opening_stock) AS 기초재고,
-        SUM(c.closing_stock) AS 기말재고
+        SUM(o.opening_stock) AS opening,
+        SUM(c.closing_stock) AS closing
     FROM opening o
     JOIN closing c
         ON  o.dt       = c.dt
@@ -96,12 +100,12 @@ movement AS (
     SELECT
         dt,
         sku_id,
-        SUM(CASE WHEN type = 'INCOMING_COMPLETED'   THEN delta ELSE 0 END) AS 입고수량,
-        SUM(CASE WHEN type = 'ADJUSTMENT_COMPLETED' THEN delta ELSE 0 END) AS 조정수량,
-        SUM(CASE WHEN type = 'OUTGOING_COMPLETED'   THEN delta ELSE 0 END) AS 출고완료,
-        SUM(CASE WHEN type = 'OUTGOING_REQUESTED'   THEN delta ELSE 0 END) AS 출고요청,
-        SUM(CASE WHEN type = 'OUTGOING_CANCELLED'   THEN delta ELSE 0 END) AS 출고취소,
-        SUM(delta)                                                           AS 순변동
+        SUM(CASE WHEN type = 'INCOMING_COMPLETED'   THEN delta ELSE 0 END) AS incoming,
+        SUM(CASE WHEN type = 'ADJUSTMENT_COMPLETED' THEN delta ELSE 0 END) AS adjustment,
+        SUM(CASE WHEN type = 'OUTGOING_COMPLETED'   THEN delta ELSE 0 END) AS out_complete,
+        SUM(CASE WHEN type = 'OUTGOING_REQUESTED'   THEN delta ELSE 0 END) AS out_request,
+        SUM(CASE WHEN type = 'OUTGOING_CANCELLED'   THEN delta ELSE 0 END) AS out_cancel,
+        SUM(delta)                                                           AS net_delta
     FROM su
     GROUP BY dt, sku_id
 ),
@@ -125,11 +129,11 @@ sku_info AS (
 -- BOM완제품: bundled_sku_ro.sku_id 에 존재하는 SKU
 -- BOM구성요소: bundled_sku_ro.bundled_sku_id 에 존재하는 SKU
 bom_type AS (
-    SELECT sku_id, 'BOM완제품' AS bom_유형
+    SELECT sku_id, 'BOM완제품' AS bom_type_nm
     FROM ods_commerce_production.bundled_sku_ro
     GROUP BY sku_id
     UNION ALL
-    SELECT bundled_sku_id AS sku_id, 'BOM구성요소' AS bom_유형
+    SELECT bundled_sku_id AS sku_id, 'BOM구성요소' AS bom_type_nm
     FROM ods_commerce_production.bundled_sku_ro
     GROUP BY bundled_sku_id
 ),
@@ -139,7 +143,7 @@ bom_type AS (
 bom_req_agg AS (
     SELECT
         su.sku_id,
-        SUM(ABS(su.delta)) AS BOM전개소요수량
+        SUM(ABS(su.delta)) AS bom_req_qty
     FROM su
     WHERE su.type = 'OUTGOING_COMPLETED'
       AND su.sku_id IN (SELECT bundled_sku_id FROM ods_commerce_production.bundled_sku_ro)
@@ -147,25 +151,25 @@ bom_req_agg AS (
 )
 
 SELECT
-    m.dt                                        AS 날짜,
+    m.dt                                             AS "날짜",
     m.sku_id,
-    si.sku_nm                                   AS SKU명,
-    si.sku_code                                 AS SKU코드,
-    si.biz_partner_id                           AS 거래처ID,
-    si.composition_type                         AS 구성유형,
-    COALESCE(bt.bom_유형, 'SINGLE')             AS BOM유형,
-    COALESCE(sb.기초재고, 0)                    AS 기초재고,
-    COALESCE(m.입고수량,  0)                    AS 입고수량,
-    COALESCE(m.조정수량,  0)                    AS 조정수량,
-    COALESCE(m.출고완료,  0)                    AS 출고완료,
-    COALESCE(m.출고요청,  0)                    AS 출고요청,
-    COALESCE(m.출고취소,  0)                    AS 출고취소,
-    COALESCE(m.순변동,    0)                    AS 순변동,
-    COALESCE(sb.기말재고, 0)                    AS 기말재고,
-    COALESCE(br.BOM전개소요수량, 0)             AS BOM전개소요수량,
+    si.sku_nm                                        AS "SKU명",
+    si.sku_code                                      AS "SKU코드",
+    si.biz_partner_id                                AS "거래처ID",
+    si.composition_type                              AS "구성유형",
+    COALESCE(bt.bom_type_nm, 'SINGLE')               AS "BOM유형",
+    COALESCE(sb.opening,      0)                     AS "기초재고",
+    COALESCE(m.incoming,      0)                     AS "입고수량",
+    COALESCE(m.adjustment,    0)                     AS "조정수량",
+    COALESCE(m.out_complete,  0)                     AS "출고완료",
+    COALESCE(m.out_request,   0)                     AS "출고요청",
+    COALESCE(m.out_cancel,    0)                     AS "출고취소",
+    COALESCE(m.net_delta,     0)                     AS "순변동",
+    COALESCE(sb.closing,      0)                     AS "기말재고",
+    COALESCE(br.bom_req_qty,  0)                     AS "BOM전개소요수량",
     -- 검증 컬럼: 0이 아니면 데이터 이상
-    COALESCE(sb.기초재고, 0) + COALESCE(m.순변동, 0)
-        - COALESCE(sb.기말재고, 0)             AS 검증_기초+순변동-기말
+    COALESCE(sb.opening, 0) + COALESCE(m.net_delta, 0)
+        - COALESCE(sb.closing, 0)                   AS "검증_기초+순변동-기말"
 FROM movement m
 LEFT JOIN stock_bounds sb ON m.dt = sb.dt AND m.sku_id = sb.sku_id
 LEFT JOIN sku_info     si ON m.sku_id = si.sku_id
@@ -230,8 +234,8 @@ closing AS (
 
 stock_bounds AS (
     SELECT o.dt, o.sku_id,
-        SUM(o.opening_stock) AS 기초재고,
-        SUM(c.closing_stock) AS 기말재고
+        SUM(o.opening_stock) AS opening,
+        SUM(c.closing_stock) AS closing
     FROM opening o
     JOIN closing c ON o.dt = c.dt AND o.sku_id = c.sku_id AND o.stock_id = c.stock_id
     GROUP BY o.dt, o.sku_id
@@ -239,7 +243,7 @@ stock_bounds AS (
 
 -- 각 SKU의 초기재고: 기간 내 처음 등장한 날의 기초재고
 sku_initial AS (
-    SELECT sb.sku_id, sb.기초재고 AS initial_stock
+    SELECT sb.sku_id, sb.opening AS initial_stock
     FROM stock_bounds sb
     INNER JOIN (
         SELECT sku_id, MIN(dt) AS first_dt
@@ -258,33 +262,33 @@ total_initial AS (
 movement AS (
     SELECT
         dt,
-        COUNT(DISTINCT sku_id)                                               AS 활동SKU수,
-        SUM(CASE WHEN type = 'INCOMING_COMPLETED'   THEN delta ELSE 0 END)  AS 입고합계,
-        SUM(CASE WHEN type = 'ADJUSTMENT_COMPLETED' THEN delta ELSE 0 END)  AS 조정합계,
-        SUM(CASE WHEN type = 'OUTGOING_COMPLETED'   THEN delta ELSE 0 END)  AS 출고완료합계,
-        SUM(CASE WHEN type = 'OUTGOING_REQUESTED'   THEN delta ELSE 0 END)  AS 출고요청합계,
-        SUM(CASE WHEN type = 'OUTGOING_CANCELLED'   THEN delta ELSE 0 END)  AS 출고취소합계,
-        SUM(delta)                                                            AS 순변동합계
+        COUNT(DISTINCT sku_id)                                               AS active_sku_cnt,
+        SUM(CASE WHEN type = 'INCOMING_COMPLETED'   THEN delta ELSE 0 END)  AS incoming,
+        SUM(CASE WHEN type = 'ADJUSTMENT_COMPLETED' THEN delta ELSE 0 END)  AS adjustment,
+        SUM(CASE WHEN type = 'OUTGOING_COMPLETED'   THEN delta ELSE 0 END)  AS out_complete,
+        SUM(CASE WHEN type = 'OUTGOING_REQUESTED'   THEN delta ELSE 0 END)  AS out_request,
+        SUM(CASE WHEN type = 'OUTGOING_CANCELLED'   THEN delta ELSE 0 END)  AS out_cancel,
+        SUM(delta)                                                            AS net_delta
     FROM su
     GROUP BY dt
 )
 
 SELECT
-    m.dt                                                                     AS 날짜,
-    m.활동SKU수,
+    m.dt                                                                     AS "날짜",
+    m.active_sku_cnt                                                         AS "활동SKU수",
     -- 기초재고합계 = 기준값 + 전날까지 누적 순변동 (ROWS PRECEDING → 현재행 제외)
     ti.total + COALESCE(
-        SUM(m.순변동합계) OVER (ORDER BY m.dt ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+        SUM(m.net_delta) OVER (ORDER BY m.dt ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
         0
-    )                                                                        AS 기초재고합계,
-    m.입고합계,
-    m.조정합계,
-    m.출고완료합계,
-    m.출고요청합계,
-    m.출고취소합계,
-    m.순변동합계,
+    )                                                                        AS "기초재고합계",
+    m.incoming                                                               AS "입고합계",
+    m.adjustment                                                             AS "조정합계",
+    m.out_complete                                                           AS "출고완료합계",
+    m.out_request                                                            AS "출고요청합계",
+    m.out_cancel                                                             AS "출고취소합계",
+    m.net_delta                                                              AS "순변동합계",
     -- 기말재고합계 = 기준값 + 당일까지 누적 순변동
-    ti.total + SUM(m.순변동합계) OVER (ORDER BY m.dt)                       AS 기말재고합계
+    ti.total + SUM(m.net_delta) OVER (ORDER BY m.dt)                        AS "기말재고합계"
 FROM movement m
 CROSS JOIN total_initial ti
 ORDER BY m.dt
@@ -340,8 +344,8 @@ closing AS (
 
 stock_bounds AS (
     SELECT o.dt, o.sku_id,
-        SUM(o.opening_stock) AS 기초재고,
-        SUM(c.closing_stock) AS 기말재고
+        SUM(o.opening_stock) AS opening,
+        SUM(c.closing_stock) AS closing
     FROM opening o
     JOIN closing c ON o.dt = c.dt AND o.sku_id = c.sku_id AND o.stock_id = c.stock_id
     GROUP BY o.dt, o.sku_id
@@ -351,12 +355,12 @@ movement AS (
     SELECT
         dt,
         sku_id,
-        SUM(CASE WHEN type = 'INCOMING_COMPLETED'   THEN delta ELSE 0 END) AS 입고수량,
-        SUM(CASE WHEN type = 'ADJUSTMENT_COMPLETED' THEN delta ELSE 0 END) AS 조정수량,
-        SUM(CASE WHEN type = 'OUTGOING_COMPLETED'   THEN delta ELSE 0 END) AS 출고완료,
-        SUM(CASE WHEN type = 'OUTGOING_REQUESTED'   THEN delta ELSE 0 END) AS 출고요청,
-        SUM(CASE WHEN type = 'OUTGOING_CANCELLED'   THEN delta ELSE 0 END) AS 출고취소,
-        SUM(delta)                                                           AS 순변동
+        SUM(CASE WHEN type = 'INCOMING_COMPLETED'   THEN delta ELSE 0 END) AS incoming,
+        SUM(CASE WHEN type = 'ADJUSTMENT_COMPLETED' THEN delta ELSE 0 END) AS adjustment,
+        SUM(CASE WHEN type = 'OUTGOING_COMPLETED'   THEN delta ELSE 0 END) AS out_complete,
+        SUM(CASE WHEN type = 'OUTGOING_REQUESTED'   THEN delta ELSE 0 END) AS out_request,
+        SUM(CASE WHEN type = 'OUTGOING_CANCELLED'   THEN delta ELSE 0 END) AS out_cancel,
+        SUM(delta)                                                           AS net_delta
     FROM su
     GROUP BY dt, sku_id
 ),
@@ -369,18 +373,19 @@ sku_info AS (
 )
 
 SELECT
-    m.dt                             AS 날짜,
-    si.sku_nm                        AS SKU명,
-    si.sku_code                      AS SKU코드,
-    si.biz_partner_id                AS 거래처ID,
-    COALESCE(sb.기초재고, 0)         AS 기초재고,
-    COALESCE(m.입고수량,  0)         AS 입고수량,
-    COALESCE(m.조정수량,  0)         AS 조정수량,
-    COALESCE(m.출고완료,  0)         AS 출고완료,
-    COALESCE(m.출고요청,  0)         AS 출고요청,
-    COALESCE(m.출고취소,  0)         AS 출고취소,
-    COALESCE(m.순변동,    0)         AS 순변동,
-    COALESCE(sb.기말재고, 0)         AS 기말재고
+    m.dt                             AS "날짜",
+    m.sku_id,
+    si.sku_nm                        AS "SKU명",
+    si.sku_code                      AS "SKU코드",
+    si.biz_partner_id                AS "거래처ID",
+    COALESCE(sb.opening,     0)      AS "기초재고",
+    COALESCE(m.incoming,     0)      AS "입고수량",
+    COALESCE(m.adjustment,   0)      AS "조정수량",
+    COALESCE(m.out_complete, 0)      AS "출고완료",
+    COALESCE(m.out_request,  0)      AS "출고요청",
+    COALESCE(m.out_cancel,   0)      AS "출고취소",
+    COALESCE(m.net_delta,    0)      AS "순변동",
+    COALESCE(sb.closing,     0)      AS "기말재고"
 FROM movement m
 LEFT JOIN stock_bounds sb ON m.dt = sb.dt AND m.sku_id = sb.sku_id
 LEFT JOIN sku_info     si ON m.sku_id = si.sku_id
