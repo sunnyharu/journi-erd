@@ -157,38 +157,20 @@ QUERIES = {
     # SKU 마스터: stock_usage_ro에 존재하는 모든 SKU (출고/조정 포함)
     "sku_ro": f"""
         SELECT
-            id,
-            name,
-            sku_code,
-            barcode,
-            status,
-            type,
-            composition_type,
-            sku_group_id,
-            price_amount,
-            currency,
-            country_of_origin,
-            usage_type,
-            deleted_at
-        FROM (
-            SELECT
-                s.id,
-                s.name,
-                s.sku_code,
-                s.barcode,
-                s.status,
-                s.type,
-                s.composition_type,
-                s.sku_group_id,
-                s.price_amount,
-                s.currency,
-                s.country_of_origin,
-                s.usage_type,
-                s.deleted_at,
-                ROW_NUMBER() OVER (PARTITION BY s.id ORDER BY s.log_date DESC) AS rn
-            FROM {SCHEMA}.sku_ro s
-        )
-        WHERE rn = 1
+            s.id,
+            s.name,
+            s.sku_code,
+            s.barcode,
+            s.status,
+            s.type,
+            s.composition_type,
+            s.sku_group_id,
+            s.price_amount,
+            s.currency,
+            s.country_of_origin,
+            s.usage_type,
+            s.deleted_at
+        FROM {SCHEMA}.sku_ro s
     """,
 
     # 배송 헤더: 기간 내 outgoing_ro와 연결된 배송
