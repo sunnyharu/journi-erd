@@ -13,7 +13,7 @@
 
 
 -- ============================================================
--- [쿼리 1] 재고수불부 (메인)
+-- [쿼리 1] 재고수불부 (메인, BOM 포함)
 -- Redash 파라미터: {{시작일}}, {{종료일}}
 -- 선택 필터: {{거래처ID}} (비워두면 전체 조회)
 -- ============================================================
@@ -113,6 +113,54 @@ sku_info AS (
         ON s.sku_group_id = sg.id
     WHERE s.deleted_at  IS NULL
       AND sg.deleted_at IS NULL
+),
+
+-- BOM 유형 분류
+-- BOM완제품: bundled_sku_ro.sku_id 에 존재하는 SKU
+-- BOM구성요소: bundled_sku_ro.bundled_sku_id 에 존재하는 SKU
+bom_type AS (
+    SELECT sku_id, 'BOM완제품' AS bom_유형
+    FROM ods_commerce_production.bundled_sku_ro
+    GROUP BY sku_id
+    UNION ALL
+    SELECT bundled_sku_id AS sku_id, 'BOM구성요소' AS bom_유형
+    FROM ods_commerce_production.bundled_sku_ro
+    GROUP BY bundled_sku_id
+),
+
+-- BOM 전개 소요수량 (delivery_ro COMPLETED 기준)
+-- 경로 A: 완제품이 배송된 경우 → 구성요소 소요 = 배송수량 × BOM단위수량
+-- 경로 B: 구성요소가 직접 배송된 경우 → 소요 = 배송수량
+bom_requirement AS (
+    -- 경로 A
+    SELECT
+        b.bundled_sku_id            AS sku_id,
+        SUM(di.quantity * b.quantity) AS bom_소요수량
+    FROM ods_commerce_production.delivery_item_ro di
+    JOIN ods_commerce_production.delivery_ro d ON di.delivery_id = d.id
+    JOIN ods_commerce_production.bundled_sku_ro b ON di.sku_id = b.sku_id
+    WHERE d.status = 'COMPLETED'
+      AND DATE(d.updated_at AT TIME ZONE 'Asia/Seoul') BETWEEN '{{시작일}}' AND '{{종료일}}'
+    GROUP BY b.bundled_sku_id
+
+    UNION ALL
+
+    -- 경로 B: 구성요소 SKU가 delivery_item에 직접 있는 경우
+    SELECT
+        di.sku_id,
+        SUM(di.quantity)            AS bom_소요수량
+    FROM ods_commerce_production.delivery_item_ro di
+    JOIN ods_commerce_production.delivery_ro d ON di.delivery_id = d.id
+    WHERE d.status = 'COMPLETED'
+      AND DATE(d.updated_at AT TIME ZONE 'Asia/Seoul') BETWEEN '{{시작일}}' AND '{{종료일}}'
+      AND di.sku_id IN (SELECT bundled_sku_id FROM ods_commerce_production.bundled_sku_ro)
+    GROUP BY di.sku_id
+),
+
+bom_req_agg AS (
+    SELECT sku_id, SUM(bom_소요수량) AS BOM전개소요수량
+    FROM bom_requirement
+    GROUP BY sku_id
 )
 
 SELECT
@@ -122,6 +170,7 @@ SELECT
     si.sku_code                                 AS SKU코드,
     si.biz_partner_id                           AS 거래처ID,
     si.composition_type                         AS 구성유형,
+    COALESCE(bt.bom_유형, 'SINGLE')             AS BOM유형,
     COALESCE(sb.기초재고, 0)                    AS 기초재고,
     COALESCE(m.입고수량,  0)                    AS 입고수량,
     COALESCE(m.조정수량,  0)                    AS 조정수량,
@@ -130,12 +179,15 @@ SELECT
     COALESCE(m.출고취소,  0)                    AS 출고취소,
     COALESCE(m.순변동,    0)                    AS 순변동,
     COALESCE(sb.기말재고, 0)                    AS 기말재고,
+    COALESCE(br.BOM전개소요수량, 0)             AS BOM전개소요수량,
     -- 검증 컬럼: 0이 아니면 데이터 이상
     COALESCE(sb.기초재고, 0) + COALESCE(m.순변동, 0)
         - COALESCE(sb.기말재고, 0)             AS 검증_기초+순변동-기말
 FROM movement m
 LEFT JOIN stock_bounds sb ON m.dt = sb.dt AND m.sku_id = sb.sku_id
 LEFT JOIN sku_info     si ON m.sku_id = si.sku_id
+LEFT JOIN bom_type     bt ON m.sku_id = bt.sku_id
+LEFT JOIN bom_req_agg  br ON m.sku_id = br.sku_id
 WHERE 1=1
   -- 거래처 필터 (Redash에서 비워두면 전체 조회)
   AND (

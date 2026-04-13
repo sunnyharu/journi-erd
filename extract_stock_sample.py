@@ -320,6 +320,26 @@ QUERIES = {
           AND date(ol.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
     """,
 
+    # BOM 구성: 완제품 SKU → 구성요소 SKU 매핑
+    "bundled_sku_ro": f"""
+        SELECT
+            b.id,
+            b.sku_id,
+            b.bundled_sku_id,
+            b.quantity
+        FROM {SCHEMA}.bundled_sku_ro b
+        WHERE b.sku_id IN (
+            SELECT DISTINCT sku_id
+            FROM {SCHEMA}.stock_usage_ro
+            WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+        )
+           OR b.bundled_sku_id IN (
+            SELECT DISTINCT sku_id
+            FROM {SCHEMA}.stock_usage_ro
+            WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+        )
+    """,
+
     # SKU 그룹: stock_usage_ro 기준 SKU의 그룹만
     "sku_group_ro": f"""
         SELECT

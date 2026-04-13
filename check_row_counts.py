@@ -139,6 +139,18 @@ COUNTS = {
           AND date(ol.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
     """,
 
+    "bundled_sku_ro": f"""
+        SELECT COUNT(*) FROM {SCHEMA}.bundled_sku_ro b
+        WHERE b.sku_id IN (
+            SELECT DISTINCT sku_id FROM {SCHEMA}.stock_usage_ro
+            WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+        )
+           OR b.bundled_sku_id IN (
+            SELECT DISTINCT sku_id FROM {SCHEMA}.stock_usage_ro
+            WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
+        )
+    """,
+
     "sku_group_ro": f"""
         SELECT COUNT(*) FROM {SCHEMA}.sku_group_ro g
         WHERE date(g.created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{SKU_START}') AND date('{END_DATE}')
