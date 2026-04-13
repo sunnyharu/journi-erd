@@ -176,8 +176,14 @@ ORDER BY m.dt, si.biz_partner_id, m.sku_id
 
 
 -- ============================================================
--- [쿼리 2] 일별 요약
+-- [쿼리 2] 일별 요약 (전일기말 = 당일기초 완벽 일치)
 -- Redash 파라미터: {{시작일}}, {{종료일}}
+--
+-- [로직]
+-- 전체 SKU의 초기재고(처음 등장일 기초재고)를 합산해 기준값으로 사용.
+-- 기초재고합계 = 기준값 + 전날까지의 누적 순변동
+-- 기말재고합계 = 기준값 + 당일까지의 누적 순변동
+-- → 전일기말 = 당일기초 (완벽 연속성 보장)
 -- ============================================================
 
 WITH
@@ -224,6 +230,24 @@ stock_bounds AS (
     GROUP BY o.dt, o.sku_id
 ),
 
+-- 각 SKU의 초기재고: 기간 내 처음 등장한 날의 기초재고
+sku_initial AS (
+    SELECT sb.sku_id, sb.기초재고 AS initial_stock
+    FROM stock_bounds sb
+    INNER JOIN (
+        SELECT sku_id, MIN(dt) AS first_dt
+        FROM stock_bounds
+        GROUP BY sku_id
+    ) fi ON sb.sku_id = fi.sku_id AND sb.dt = fi.first_dt
+),
+
+-- 전체 SKU 초기재고 합계 (기준값)
+total_initial AS (
+    SELECT SUM(initial_stock) AS total
+    FROM sku_initial
+),
+
+-- 날짜별 움직임 집계
 movement AS (
     SELECT
         dt,
@@ -236,30 +260,26 @@ movement AS (
         SUM(delta)                                                            AS 순변동합계
     FROM su
     GROUP BY dt
-),
-
-daily_stock AS (
-    SELECT
-        dt,
-        SUM(기초재고) AS 기초재고합계,
-        SUM(기말재고) AS 기말재고합계
-    FROM stock_bounds
-    GROUP BY dt
 )
 
 SELECT
-    m.dt                                AS 날짜,
+    m.dt                                                                     AS 날짜,
     m.활동SKU수,
-    COALESCE(ds.기초재고합계, 0)        AS 기초재고합계,
-    COALESCE(m.입고합계,      0)        AS 입고합계,
-    COALESCE(m.조정합계,      0)        AS 조정합계,
-    COALESCE(m.출고완료합계,  0)        AS 출고완료합계,
-    COALESCE(m.출고요청합계,  0)        AS 출고요청합계,
-    COALESCE(m.출고취소합계,  0)        AS 출고취소합계,
-    COALESCE(m.순변동합계,    0)        AS 순변동합계,
-    COALESCE(ds.기말재고합계, 0)        AS 기말재고합계
+    -- 기초재고합계 = 기준값 + 전날까지 누적 순변동 (ROWS PRECEDING → 현재행 제외)
+    ti.total + COALESCE(
+        SUM(m.순변동합계) OVER (ORDER BY m.dt ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+        0
+    )                                                                        AS 기초재고합계,
+    m.입고합계,
+    m.조정합계,
+    m.출고완료합계,
+    m.출고요청합계,
+    m.출고취소합계,
+    m.순변동합계,
+    -- 기말재고합계 = 기준값 + 당일까지 누적 순변동
+    ti.total + SUM(m.순변동합계) OVER (ORDER BY m.dt)                       AS 기말재고합계
 FROM movement m
-LEFT JOIN daily_stock ds ON m.dt = ds.dt
+CROSS JOIN total_initial ti
 ORDER BY m.dt
 ;
 
