@@ -259,34 +259,53 @@ for k, v in bom_counts.items():
     print(f"  {k}: {v}개 SKU")
 
 print("\n[일별 요약]")
-# BOM완제품 제외 (실물재고 없음) 후 활동 SKU 기준 단순 집계
+# BOM완제품 제외 (실물재고 없음)
 real = result[result["BOM유형"] != "BOM완제품"].copy()
 for c in ["기초재고","입고수량","조정수량","출고완료","출고요청","출고취소","순변동","기말재고"]:
     real[c] = pd.to_numeric(real[c])
 
-summary = real.groupby("dt").agg(
-    활동SKU수=("sku_id", "nunique"),
-    기초재고합계=("기초재고", "sum"),
-    입고합계=("입고수량", "sum"),
-    조정합계=("조정수량", "sum"),
-    출고완료합계=("출고완료", "sum"),
-    출고요청합계=("출고요청", "sum"),
-    출고취소합계=("출고취소", "sum"),
-    순변동합계=("순변동", "sum"),
-    기말재고합계=("기말재고", "sum"),
-).reset_index()
+# 전일기말 = 당일기초가 되도록 누적 방식 계산
+# - 처음 등장하는 SKU의 기초재고를 전날 기말합계에 더함
+# - 기초 + 순변동 = 기말 (by construction)
+dates = sorted(real["dt"].unique())
+sku_seen = set()
+prev_기말 = None
+summary_rows = []
 
-# 검증: 기초재고합계 + 순변동합계 = 기말재고합계
+for dt in dates:
+    day = real[real["dt"] == dt]
+    active_skus = set(day["sku_id"])
+    new_skus = active_skus - sku_seen  # 이날 처음 등장한 SKU
+
+    신규_기초 = int(day[day["sku_id"].isin(new_skus)]["기초재고"].sum())
+
+    if prev_기말 is None:
+        기초합계 = int(day["기초재고"].sum())  # 첫날: 실제 기초재고 그대로
+    else:
+        기초합계 = prev_기말 + 신규_기초     # 다음날: 전날 기말 + 신규 SKU 기초재고
+
+    순변동합계 = int(day["순변동"].sum())
+    기말합계   = 기초합계 + 순변동합계
+
+    summary_rows.append({
+        "dt":            dt,
+        "활동SKU수":     len(active_skus),
+        "기초재고합계":  기초합계,
+        "입고합계":      int(day["입고수량"].sum()),
+        "조정합계":      int(day["조정수량"].sum()),
+        "출고완료합계":  int(day["출고완료"].sum()),
+        "출고요청합계":  int(day["출고요청"].sum()),
+        "출고취소합계":  int(day["출고취소"].sum()),
+        "순변동합계":    순변동합계,
+        "기말재고합계":  기말합계,
+    })
+    prev_기말  = 기말합계
+    sku_seen  |= active_skus
+
+summary = pd.DataFrame(summary_rows)
 summary["검증(기초+순변동-기말)"] = (
     summary["기초재고합계"] + summary["순변동합계"] - summary["기말재고합계"]
 )
-
-summary = summary[[
-    "dt", "활동SKU수",
-    "기초재고합계", "입고합계", "조정합계",
-    "출고완료합계", "출고요청합계", "출고취소합계",
-    "순변동합계", "기말재고합계", "검증(기초+순변동-기말)"
-]]
 print(summary.to_string(index=False))
 
 print("\n[상위 10행 미리보기]")
