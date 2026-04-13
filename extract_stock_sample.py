@@ -157,8 +157,8 @@ QUERIES = {
     # SKU 마스터: stock_usage_ro에 존재하는 모든 SKU (출고/조정 포함)
     "sku_ro": f"""
         SELECT
-            s.id,
-            s.name,
+            s.sku_id  AS id,
+            s.sku_name AS name,
             s.sku_code,
             s.barcode,
             s.status,
@@ -173,7 +173,7 @@ QUERIES = {
         FROM {SCHEMA}.sku_ro s
         WHERE (
               -- stock_usage_ro에 등장한 SKU: 삭제 여부 무관하게 포함 (재고 이력이 있으면 표시)
-              s.id IN (
+              s.sku_id IN (
                   SELECT DISTINCT sku_id
                   FROM {SCHEMA}.stock_usage_ro
                   WHERE date(created_at AT TIME ZONE 'Asia/Seoul') BETWEEN date('{START_DATE}') AND date('{END_DATE}')
@@ -181,7 +181,7 @@ QUERIES = {
               -- BOM 완제품 SKU: 삭제되지 않은 것만
               OR (
                   s.deleted_at IS NULL
-                  AND s.id IN (
+                  AND s.sku_id IN (
                       SELECT DISTINCT sku_id
                       FROM {SCHEMA}.bundled_sku_ro
                   )
