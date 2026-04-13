@@ -293,7 +293,8 @@ ORDER BY m.dt
 
 -- ============================================================
 -- [쿼리 3] SKU별 조회 (특정 SKU 상세)
--- Redash 파라미터: {{시작일}}, {{종료일}}, {{sku_id}}
+-- Redash 파라미터: {{시작일}}, {{종료일}}
+-- 선택 필터: {{sku_id}} (비워두면 전체 조회)
 -- ============================================================
 
 WITH
@@ -311,7 +312,10 @@ su AS (
     FROM ods_commerce_production.stock_usage_ro
     WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul')
           BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
-      AND sku_id = CAST('{{sku_id}}' AS BIGINT)
+      AND (
+            '{{sku_id}}' = ''
+            OR CAST(sku_id AS VARCHAR) = '{{sku_id}}'
+      )
 ),
 
 opening AS (
