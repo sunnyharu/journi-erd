@@ -298,4 +298,85 @@ ORDER BY m.biz_partner_id, m.dt
 ;
 
 
--- (구 쿼리 3 삭제 — 쿼리 1에 sku_id 필터로 통합됨)
+-- ============================================================
+-- [쿼리 3] BOM 구조 조회
+-- 특정 SKU가 속한 BOM 완제품과 전체 구성요소 목록을 보여줌
+--
+-- [사용법]
+-- sku_id: 완제품 또는 구성요소 sku_id 입력
+--         → 해당 SKU가 속한 모든 BOM 세트 구조를 출력
+-- 조회 기간: 기간 내 실제 출고완료 수량도 함께 표시
+--
+-- [출력 행 구성]
+-- 하나의 BOM 세트당 구성요소 수만큼 행 출력
+-- 조회한 sku_id 행은 "★ 조회 SKU" 표시
+-- ============================================================
+
+WITH
+
+-- 입력 SKU가 완제품인 경우 → 해당 sku_id가 부모
+-- 입력 SKU가 구성요소인 경우 → bundled_sku_ro에서 부모(sku_id) 찾기
+parent_ids AS (
+    SELECT sku_id AS bom_parent_id
+    FROM ods_commerce_production.bundled_sku_ro
+    WHERE sku_id = CAST('{{sku_id}}' AS BIGINT)           -- 완제품으로 직접 입력한 경우
+    UNION
+    SELECT sku_id AS bom_parent_id
+    FROM ods_commerce_production.bundled_sku_ro
+    WHERE bundled_sku_id = CAST('{{sku_id}}' AS BIGINT)   -- 구성요소로 입력한 경우 → 부모 찾기
+),
+
+-- 해당 부모(들)의 전체 구성요소 목록
+bom_all AS (
+    SELECT
+        b.sku_id         AS bom_parent_id,
+        b.bundled_sku_id AS component_id,
+        b.quantity        AS unit_qty
+    FROM ods_commerce_production.bundled_sku_ro b
+    JOIN parent_ids p ON b.sku_id = p.bom_parent_id
+),
+
+-- 조회 기간 내 구성요소별 실제 출고완료 수량
+su AS (
+    SELECT sku_id, SUM(ABS(delta)) AS actual_outgoing
+    FROM ods_commerce_production.stock_usage_ro
+    WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul')
+          BETWEEN date '{{조회 기간.start}}' AND date '{{조회 기간.end}}'
+      AND type = 'OUTGOING_COMPLETED'
+    GROUP BY sku_id
+),
+
+-- SKU 마스터 (완제품/구성요소 이름 조회용)
+sku_info AS (
+    SELECT s.id AS sku_id, s.name AS sku_nm, s.sku_code, sg.biz_partner_id
+    FROM ods_commerce_production.sku_ro s
+    JOIN ods_commerce_production.sku_group_ro sg ON s.sku_group_id = sg.id
+    WHERE s.deleted_at IS NULL AND sg.deleted_at IS NULL
+)
+
+SELECT
+    pi_parent.biz_partner_id                              AS "거래처ID",
+    b.bom_parent_id                                       AS "BOM완제품_SKU_ID",
+    pi_parent.sku_nm                                      AS "BOM완제품명",
+    pi_parent.sku_code                                    AS "BOM완제품코드",
+    b.component_id                                        AS "구성요소_SKU_ID",
+    pi_comp.sku_nm                                        AS "구성요소명",
+    pi_comp.sku_code                                      AS "구성요소코드",
+    b.unit_qty                                            AS "단위구성수량",
+    COALESCE(su.actual_outgoing, 0)                       AS "기간내출고완료수량",
+    CASE
+        WHEN b.unit_qty > 0
+        THEN COALESCE(su.actual_outgoing, 0) / b.unit_qty
+        ELSE 0
+    END                                                   AS "완제품판매역산수량",
+    CASE
+        WHEN b.component_id = CAST('{{sku_id}}' AS BIGINT)
+        THEN '★ 조회 SKU'
+        ELSE ''
+    END                                                   AS "비고"
+FROM bom_all b
+LEFT JOIN sku_info pi_parent ON b.bom_parent_id = pi_parent.sku_id
+LEFT JOIN sku_info pi_comp   ON b.component_id  = pi_comp.sku_id
+LEFT JOIN su                 ON b.component_id  = su.sku_id
+ORDER BY b.bom_parent_id, b.component_id
+;
