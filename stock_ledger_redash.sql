@@ -68,7 +68,7 @@ movement AS (
 -- → 멀티창고 합산, 움직임 없는 SKU도 포함
 
 stock_ro_total AS (
-    SELECT sku_id, SUM(quantity) AS current_total
+    SELECT sku_id, SUM(physical_quantity) AS current_total
     FROM ods_commerce_production.stock_ro
     GROUP BY sku_id
 ),
@@ -233,7 +233,7 @@ movement AS (
 -- → 기말재고합계(마지막날) = total_initial + 기간전체변동 = 종료일 기준 파트너 전체 재고
 
 stock_ro_total AS (
-    SELECT si.biz_partner_id, SUM(sr.quantity) AS current_total
+    SELECT si.biz_partner_id, SUM(sr.physical_quantity) AS current_total
     FROM ods_commerce_production.stock_ro sr
     JOIN sku_info si ON sr.sku_id = si.sku_id
     GROUP BY si.biz_partner_id
