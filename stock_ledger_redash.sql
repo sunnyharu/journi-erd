@@ -192,60 +192,12 @@ su AS (
           BETWEEN date '{{조회 기간.start}}' AND date '{{조회 기간.end}}'
 ),
 
-opening AS (
-    SELECT s1.dt, s1.sku_id, s1.stock_id, MIN(s1.before_quantity) AS opening_stock
-    FROM su s1
-    LEFT JOIN su s2
-        ON  s1.dt = s2.dt AND s1.sku_id = s2.sku_id AND s1.stock_id = s2.stock_id
-        AND s1.before_quantity = s2.after_quantity
-    WHERE s2.sku_id IS NULL
-    GROUP BY s1.dt, s1.sku_id, s1.stock_id
-),
-
-closing AS (
-    SELECT s1.dt, s1.sku_id, s1.stock_id, MAX(s1.after_quantity) AS closing_stock
-    FROM su s1
-    LEFT JOIN su s2
-        ON  s1.dt = s2.dt AND s1.sku_id = s2.sku_id AND s1.stock_id = s2.stock_id
-        AND s1.after_quantity = s2.before_quantity
-    WHERE s2.sku_id IS NULL
-    GROUP BY s1.dt, s1.sku_id, s1.stock_id
-),
-
-stock_bounds AS (
-    SELECT o.dt, o.sku_id,
-        SUM(o.opening_stock) AS opening,
-        SUM(c.closing_stock) AS closing
-    FROM opening o
-    JOIN closing c ON o.dt = c.dt AND o.sku_id = c.sku_id AND o.stock_id = c.stock_id
-    GROUP BY o.dt, o.sku_id
-),
-
 -- SKU → 거래처 매핑
 sku_info AS (
     SELECT s.id AS sku_id, sg.biz_partner_id
     FROM ods_commerce_production.sku_ro s
     JOIN ods_commerce_production.sku_group_ro sg ON s.sku_group_id = sg.id
     WHERE s.deleted_at IS NULL AND sg.deleted_at IS NULL
-),
-
--- 각 SKU의 초기재고 (biz_partner_id 포함)
-sku_initial AS (
-    SELECT sb.sku_id, sb.opening AS initial_stock, si.biz_partner_id
-    FROM stock_bounds sb
-    JOIN sku_info si ON sb.sku_id = si.sku_id
-    INNER JOIN (
-        SELECT sku_id, MIN(dt) AS first_dt
-        FROM stock_bounds
-        GROUP BY sku_id
-    ) fi ON sb.sku_id = fi.sku_id AND sb.dt = fi.first_dt
-),
-
--- 거래처별 전체 초기재고 합계 (기준값)
-total_initial AS (
-    SELECT biz_partner_id, SUM(initial_stock) AS total
-    FROM sku_initial
-    GROUP BY biz_partner_id
 ),
 
 -- 날짜별 + 거래처별 움직임 집계
@@ -263,13 +215,59 @@ movement AS (
     FROM su
     JOIN sku_info si ON su.sku_id = si.sku_id
     GROUP BY su.dt, si.biz_partner_id
+),
+
+-- [stock_ro 역산 방식] 거래처별 기준값 계산
+-- 목적: 움직임이 없는 SKU 포함 전체 파트너 재고를 기준값으로 사용
+--
+-- stock_ro = 현재 시점 전체 재고 스냅샷 (움직임 없는 SKU 포함)
+-- post_period = 조회종료일 이후 변동 (역산 대상)
+-- period_net  = 조회기간 내 전체 변동 (역산 대상)
+--
+-- total_initial = stock_ro현재 - 종료일이후변동 - 기간내변동
+--              = 조회시작일 직전 파트너 전체 재고
+-- → 기말재고합계(마지막날) = total_initial + 기간전체변동 = 종료일 기준 파트너 전체 재고
+
+stock_ro_total AS (
+    SELECT si.biz_partner_id, SUM(sr.quantity) AS current_total
+    FROM ods_commerce_production.stock_ro sr
+    JOIN sku_info si ON sr.sku_id = si.sku_id
+    GROUP BY si.biz_partner_id
+),
+
+-- 조회종료일 이후 발생한 변동 (stock_ro에서 역산)
+post_period AS (
+    SELECT si.biz_partner_id, SUM(su2.delta) AS post_delta
+    FROM ods_commerce_production.stock_usage_ro su2
+    JOIN sku_info si ON su2.sku_id = si.sku_id
+    WHERE DATE(su2.updated_at AT TIME ZONE 'Asia/Seoul') > date '{{조회 기간.end}}'
+    GROUP BY si.biz_partner_id
+),
+
+-- 조회기간 내 전체 순변동 합계
+period_net AS (
+    SELECT biz_partner_id, SUM(net_delta) AS period_total_delta
+    FROM movement
+    GROUP BY biz_partner_id
+),
+
+-- 기준값: 조회시작일 직전 파트너 전체 재고
+total_initial AS (
+    SELECT
+        srt.biz_partner_id,
+        srt.current_total
+            - COALESCE(pp.post_delta, 0)
+            - COALESCE(pn.period_total_delta, 0) AS total
+    FROM stock_ro_total srt
+    LEFT JOIN post_period pp ON srt.biz_partner_id = pp.biz_partner_id
+    LEFT JOIN period_net  pn ON srt.biz_partner_id = pn.biz_partner_id
 )
 
 SELECT
     m.dt                                                                          AS "날짜",
     m.biz_partner_id                                                              AS "거래처ID",
     m.active_sku_cnt                                                              AS "활동SKU수",
-    -- 기초재고합계 = 거래처별 기준값 + 전날까지 누적 순변동
+    -- 기초재고합계 = 기준값(조회시작일직전전체재고) + 전날까지 누적 순변동
     ti.total + COALESCE(
         SUM(m.net_delta) OVER (
             PARTITION BY m.biz_partner_id
