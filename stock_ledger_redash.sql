@@ -48,36 +48,6 @@ su AS (
           BETWEEN date '{{조회 기간.start}}' AND date '{{조회 기간.end}}'
 ),
 
--- 체인셋: (dt, sku_id, stock_id)별 기초재고 (당일 첫 이벤트 before_quantity)
-opening AS (
-    SELECT s1.dt, s1.sku_id, s1.stock_id, MIN(s1.before_quantity) AS opening_stock
-    FROM su s1
-    LEFT JOIN su s2
-        ON  s1.dt = s2.dt AND s1.sku_id = s2.sku_id AND s1.stock_id = s2.stock_id
-        AND s1.before_quantity = s2.after_quantity
-    WHERE s2.sku_id IS NULL
-    GROUP BY s1.dt, s1.sku_id, s1.stock_id
-),
-
--- (sku_id, stock_id)별 초기재고: 처음 활동한 날의 체인셋 opening
--- 멀티창고 SKU는 창고별로 각각 초기재고를 구함
-per_stock_initial AS (
-    SELECT o.sku_id, o.stock_id, o.opening_stock AS initial_balance
-    FROM opening o
-    INNER JOIN (
-        SELECT sku_id, stock_id, MIN(dt) AS first_dt
-        FROM opening
-        GROUP BY sku_id, stock_id
-    ) fi ON o.sku_id = fi.sku_id AND o.stock_id = fi.stock_id AND o.dt = fi.first_dt
-),
-
--- SKU별 전체 초기재고 합계 (모든 창고 합산)
-sku_initial_total AS (
-    SELECT sku_id, SUM(initial_balance) AS total_initial
-    FROM per_stock_initial
-    GROUP BY sku_id
-),
-
 -- type별 delta 집계 (모든 stock_id 합산)
 movement AS (
     SELECT
@@ -91,6 +61,40 @@ movement AS (
         SUM(delta)                                                           AS net_delta
     FROM su
     GROUP BY dt, sku_id
+),
+
+-- [stock_ro 역산 방식] SKU별 기준값 계산
+-- stock_ro현재 - 종료일이후변동 - 기간내변동 = 조회시작일 직전 SKU별 재고
+-- → 멀티창고 합산, 움직임 없는 SKU도 포함
+
+stock_ro_total AS (
+    SELECT sku_id, SUM(quantity) AS current_total
+    FROM ods_commerce_production.stock_ro
+    GROUP BY sku_id
+),
+
+post_period AS (
+    SELECT sku_id, SUM(delta) AS post_delta
+    FROM ods_commerce_production.stock_usage_ro
+    WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul') > date '{{조회 기간.end}}'
+    GROUP BY sku_id
+),
+
+period_net AS (
+    SELECT sku_id, SUM(net_delta) AS period_total_delta
+    FROM movement
+    GROUP BY sku_id
+),
+
+sku_initial_total AS (
+    SELECT
+        srt.sku_id,
+        srt.current_total
+            - COALESCE(pp.post_delta, 0)
+            - COALESCE(pn.period_total_delta, 0) AS total_initial
+    FROM stock_ro_total srt
+    LEFT JOIN post_period pp ON srt.sku_id = pp.sku_id
+    LEFT JOIN period_net  pn ON srt.sku_id = pn.sku_id
 ),
 
 -- SKU 마스터 (거래처 포함)
