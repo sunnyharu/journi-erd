@@ -346,6 +346,16 @@ su AS (
     GROUP BY sku_id
 ),
 
+-- 완제품(BOM 부모 SKU) 기준 조회기간.end 이전 누적 판매수량
+parent_sales AS (
+    SELECT sku_id, SUM(ABS(delta)) AS cumul_sales
+    FROM ods_commerce_production.stock_usage_ro
+    WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul') <= date '{{조회 기간.end}}'
+      AND type = 'OUTGOING_COMPLETED'
+      AND sku_id IN (SELECT bom_parent_id FROM parent_ids)
+    GROUP BY sku_id
+),
+
 -- SKU 마스터 (완제품/구성요소 이름 조회용)
 sku_info AS (
     SELECT s.id AS sku_id, s.name AS sku_nm, s.sku_code, sg.biz_partner_id
@@ -363,6 +373,7 @@ SELECT
     pi_comp.sku_nm                                        AS "구성요소명",
     pi_comp.sku_code                                      AS "구성요소코드",
     b.unit_qty                                            AS "단위구성수량",
+    COALESCE(ps.cumul_sales, 0)                            AS "완제품누적판매수량(기간종료일기준)",
     COALESCE(su.actual_outgoing, 0)                       AS "기간내출고완료수량",
     CASE
         WHEN b.unit_qty > 0
@@ -378,5 +389,6 @@ FROM bom_all b
 LEFT JOIN sku_info pi_parent ON b.bom_parent_id = pi_parent.sku_id
 LEFT JOIN sku_info pi_comp   ON b.component_id  = pi_comp.sku_id
 LEFT JOIN su                 ON b.component_id  = su.sku_id
+LEFT JOIN parent_sales ps    ON b.bom_parent_id = ps.sku_id
 ORDER BY b.bom_parent_id, b.component_id
 ;
