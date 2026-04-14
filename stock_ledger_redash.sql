@@ -186,14 +186,15 @@ ORDER BY m.dt, si.biz_partner_id, m.sku_id
 
 
 -- ============================================================
--- [쿼리 2] 일별 요약 (전일기말 = 당일기초 완벽 일치)
--- Redash 파라미터: {{시작일}}, {{종료일}}
+-- [쿼리 2] 일별 요약 (거래처별, 전일기말 = 당일기초 완벽 일치)
+-- Redash 파라미터: {{조회 기간}} (date range)
+-- 선택 필터: {{거래처ID}} (비워두면 전체 거래처 조회)
 --
 -- [로직]
--- 전체 SKU의 초기재고(처음 등장일 기초재고)를 합산해 기준값으로 사용.
--- 기초재고합계 = 기준값 + 전날까지의 누적 순변동
--- 기말재고합계 = 기준값 + 당일까지의 누적 순변동
--- → 전일기말 = 당일기초 (완벽 연속성 보장)
+-- biz_partner_id별로 전체 SKU 초기재고 합산 → 기준값으로 사용
+-- 기초재고합계 = 기준값 + 전날까지 누적 순변동  (PARTITION BY biz_partner_id)
+-- 기말재고합계 = 기준값 + 당일까지 누적 순변동  (PARTITION BY biz_partner_id)
+-- → 거래처별로 전일기말 = 당일기초 연속성 보장
 -- ============================================================
 
 WITH
@@ -209,7 +210,7 @@ su AS (
         delta
     FROM ods_commerce_production.stock_usage_ro
     WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul')
-          BETWEEN DATE('{{시작일}}') AND DATE('{{종료일}}')
+          BETWEEN date '{{조회 기간.start}}' AND date '{{조회 기간.end}}'
 ),
 
 opening AS (
@@ -241,10 +242,19 @@ stock_bounds AS (
     GROUP BY o.dt, o.sku_id
 ),
 
--- 각 SKU의 초기재고: 기간 내 처음 등장한 날의 기초재고
+-- SKU → 거래처 매핑
+sku_info AS (
+    SELECT s.id AS sku_id, sg.biz_partner_id
+    FROM ods_commerce_production.sku_ro s
+    JOIN ods_commerce_production.sku_group_ro sg ON s.sku_group_id = sg.id
+    WHERE s.deleted_at IS NULL AND sg.deleted_at IS NULL
+),
+
+-- 각 SKU의 초기재고 (biz_partner_id 포함)
 sku_initial AS (
-    SELECT sb.sku_id, sb.opening AS initial_stock
+    SELECT sb.sku_id, sb.opening AS initial_stock, si.biz_partner_id
     FROM stock_bounds sb
+    JOIN sku_info si ON sb.sku_id = si.sku_id
     INNER JOIN (
         SELECT sku_id, MIN(dt) AS first_dt
         FROM stock_bounds
@@ -252,46 +262,60 @@ sku_initial AS (
     ) fi ON sb.sku_id = fi.sku_id AND sb.dt = fi.first_dt
 ),
 
--- 전체 SKU 초기재고 합계 (기준값)
+-- 거래처별 전체 초기재고 합계 (기준값)
 total_initial AS (
-    SELECT SUM(initial_stock) AS total
+    SELECT biz_partner_id, SUM(initial_stock) AS total
     FROM sku_initial
+    GROUP BY biz_partner_id
 ),
 
--- 날짜별 움직임 집계
+-- 날짜별 + 거래처별 움직임 집계
 movement AS (
     SELECT
-        dt,
-        COUNT(DISTINCT sku_id)                                               AS active_sku_cnt,
-        SUM(CASE WHEN type = 'INCOMING_COMPLETED'   THEN delta ELSE 0 END)  AS incoming,
-        SUM(CASE WHEN type = 'ADJUSTMENT_COMPLETED' THEN delta ELSE 0 END)  AS adjustment,
-        SUM(CASE WHEN type = 'OUTGOING_COMPLETED'   THEN delta ELSE 0 END)  AS out_complete,
-        SUM(CASE WHEN type = 'OUTGOING_REQUESTED'   THEN delta ELSE 0 END)  AS out_request,
-        SUM(CASE WHEN type = 'OUTGOING_CANCELLED'   THEN delta ELSE 0 END)  AS out_cancel,
-        SUM(delta)                                                            AS net_delta
+        su.dt,
+        si.biz_partner_id,
+        COUNT(DISTINCT su.sku_id)                                                AS active_sku_cnt,
+        SUM(CASE WHEN su.type = 'INCOMING_COMPLETED'   THEN su.delta ELSE 0 END) AS incoming,
+        SUM(CASE WHEN su.type = 'ADJUSTMENT_COMPLETED' THEN su.delta ELSE 0 END) AS adjustment,
+        SUM(CASE WHEN su.type = 'OUTGOING_COMPLETED'   THEN su.delta ELSE 0 END) AS out_complete,
+        SUM(CASE WHEN su.type = 'OUTGOING_REQUESTED'   THEN su.delta ELSE 0 END) AS out_request,
+        SUM(CASE WHEN su.type = 'OUTGOING_CANCELLED'   THEN su.delta ELSE 0 END) AS out_cancel,
+        SUM(su.delta)                                                             AS net_delta
     FROM su
-    GROUP BY dt
+    JOIN sku_info si ON su.sku_id = si.sku_id
+    GROUP BY su.dt, si.biz_partner_id
 )
 
 SELECT
-    m.dt                                                                     AS "날짜",
-    m.active_sku_cnt                                                         AS "활동SKU수",
-    -- 기초재고합계 = 기준값 + 전날까지 누적 순변동 (ROWS PRECEDING → 현재행 제외)
+    m.dt                                                                          AS "날짜",
+    m.biz_partner_id                                                              AS "거래처ID",
+    m.active_sku_cnt                                                              AS "활동SKU수",
+    -- 기초재고합계 = 거래처별 기준값 + 전날까지 누적 순변동
     ti.total + COALESCE(
-        SUM(m.net_delta) OVER (ORDER BY m.dt ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
-        0
-    )                                                                        AS "기초재고합계",
-    m.incoming                                                               AS "입고합계",
-    m.adjustment                                                             AS "조정합계",
-    m.out_complete                                                           AS "출고완료합계",
-    m.out_request                                                            AS "출고요청합계",
-    m.out_cancel                                                             AS "출고취소합계",
-    m.net_delta                                                              AS "순변동합계",
-    -- 기말재고합계 = 기준값 + 당일까지 누적 순변동
-    ti.total + SUM(m.net_delta) OVER (ORDER BY m.dt)                        AS "기말재고합계"
+        SUM(m.net_delta) OVER (
+            PARTITION BY m.biz_partner_id
+            ORDER BY m.dt
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ), 0
+    )                                                                             AS "기초재고합계",
+    m.incoming                                                                    AS "입고합계",
+    m.adjustment                                                                  AS "조정합계",
+    m.out_complete                                                                AS "출고완료합계",
+    m.out_request                                                                 AS "출고요청합계",
+    m.out_cancel                                                                  AS "출고취소합계",
+    m.net_delta                                                                   AS "순변동합계",
+    -- 기말재고합계 = 거래처별 기준값 + 당일까지 누적 순변동
+    ti.total + SUM(m.net_delta) OVER (
+        PARTITION BY m.biz_partner_id
+        ORDER BY m.dt
+    )                                                                             AS "기말재고합계"
 FROM movement m
-CROSS JOIN total_initial ti
-ORDER BY m.dt
+JOIN total_initial ti ON m.biz_partner_id = ti.biz_partner_id
+WHERE (
+    '{{거래처ID}}' = ''
+    OR CAST(m.biz_partner_id AS VARCHAR) = '{{거래처ID}}'
+)
+ORDER BY m.biz_partner_id, m.dt
 ;
 
 
