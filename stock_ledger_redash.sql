@@ -347,11 +347,13 @@ su AS (
 ),
 
 -- 완제품(BOM 부모 SKU) 기준 조회기간.end 이전 누적 판매수량
+-- order_line_ro 기준: status = 'COMPLETED'(주문완료), deleted_at IS NULL
 parent_sales AS (
-    SELECT sku_id, SUM(ABS(delta)) AS cumul_sales
-    FROM ods_commerce_production.stock_usage_ro
+    SELECT sku_id, SUM(quantity) AS cumul_sales
+    FROM ods_commerce_production.order_line_ro
     WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul') <= date '{{조회 기간.end}}'
-      AND type = 'OUTGOING_COMPLETED'
+      AND status = 'COMPLETED'
+      AND deleted_at IS NULL
       AND sku_id IN (SELECT bom_parent_id FROM parent_ids)
     GROUP BY sku_id
 ),
