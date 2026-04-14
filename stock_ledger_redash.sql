@@ -423,21 +423,21 @@ ORDER BY b.bom_parent_id, b.component_id
 WITH
 
 su AS (
+    -- ref_id + sku_id 기준 집계: 동일 거래가 멀티창고로 나뉜 경우 하나로 합산
     SELECT
         DATE(updated_at AT TIME ZONE 'Asia/Seoul') AS dt,
-        id,
         sku_id,
-        stock_id,
         type,
         ref_id,
         ref_type,
-        before_quantity,
-        after_quantity,
-        delta
+        SUM(delta) AS delta
     FROM ods_commerce_production.stock_usage_ro
     WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul')
           BETWEEN date '{{조회 기간.start}}' AND date '{{조회 기간.end}}'
       AND type IN ('INCOMING_COMPLETED', 'OUTGOING_COMPLETED', 'ADJUSTMENT_COMPLETED')
+    GROUP BY
+        DATE(updated_at AT TIME ZONE 'Asia/Seoul'),
+        sku_id, type, ref_id, ref_type
 ),
 
 sku_info AS (
@@ -454,11 +454,8 @@ sku_info AS (
     WHERE s.deleted_at IS NULL AND sg.deleted_at IS NULL
 ),
 
--- stock_id → warehouse_id 매핑 (창고명은 별도 테이블 확인 필요)
-stock_wh AS (
-    SELECT id AS stock_id, warehouse_id
-    FROM ods_commerce_production.stock_ro
-)
+-- stock_id → warehouse_id 매핑 제거 (ref_id 기준 집계로 stock_id 단일화 불가)
+-- 관리창고는 추후 warehouse 매핑 테이블 확보 시 추가
 
 SELECT
     su.dt                                                                 AS "날짜",
@@ -490,27 +487,27 @@ SELECT
 
     su.delta                                                              AS "수량",
 
-    -- 관리창고: warehouse_id (창고명 매핑 테이블 확인 후 JOIN 추가 필요)
-    sw.warehouse_id                                                       AS "관리창고(warehouse_id)",
+    -- 관리창고: ref_id 기준 집계로 stock_id 제거됨 → 매핑 테이블 확보 시 추가
+    CAST(NULL AS BIGINT)                                                  AS "관리창고(warehouse_id)",
 
     -- 이동 체번: TRANSFER ref_type 없으므로 현재 자동생성 불가 (운영 수동 입력)
     CAST(NULL AS VARCHAR)                                                 AS "이동입출고체번",
 
-    -- 단가/금액: sku_ro.price_amount 기준 (실매입가는 incoming_item_ro.purchase_price 참고)
-    si.price_amount                                                       AS "단가(VAT별도)",
-    si.price_amount * ABS(su.delta)                                       AS "공급가액",
-    ROUND(si.price_amount * ABS(su.delta) * 0.1)                         AS "VAT(부가세)",
-    ROUND(si.price_amount * ABS(su.delta) * 1.1)                         AS "공급대가",
+    -- 단가/금액: sku_ro.price_amount 기준 (varchar → double 변환)
+    TRY_CAST(si.price_amount AS DOUBLE)                                   AS "단가(VAT별도)",
+    TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta)                  AS "공급가액",
+    ROUND(TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta) * 0.1)    AS "VAT(부가세)",
+    ROUND(TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta) * 1.1)    AS "공급대가",
 
-    su.before_quantity                                                    AS "변동전수량",
-    su.after_quantity                                                     AS "변동후수량",
-    su.type                                                               AS "원본type",
-    su.ref_type                                                           AS "원본ref_type",
-    su.ref_id                                                             AS "원본ref_id"
+    -- 변동전/후 수량: ref_id 기준 집계로 stock_id 제거됨 → NULL (원본 필요시 stock_id 복원 필요)
+    CAST(NULL AS BIGINT)                                                  AS "변동전수량",
+    CAST(NULL AS BIGINT)                                                  AS "변동후수량",
+    su.type                                                               AS "이벤트타입",
+    su.ref_type                                                           AS "참조타입",
+    su.ref_id                                                             AS "참조ID"
 
 FROM su
 LEFT JOIN sku_info si ON su.sku_id = si.sku_id
-LEFT JOIN stock_wh sw ON su.stock_id = sw.stock_id
 WHERE (
     '{{거래처ID}}' = ''
     OR CAST(si.biz_partner_id AS VARCHAR) = '{{거래처ID}}'
@@ -519,5 +516,5 @@ AND (
     '{{sku_id}}' = ''
     OR CAST(su.sku_id AS VARCHAR) = '{{sku_id}}'
 )
-ORDER BY su.dt, si.biz_partner_id, su.sku_id, su.id
+ORDER BY su.dt, si.biz_partner_id, su.sku_id, su.ref_id
 ;
