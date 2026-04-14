@@ -396,3 +396,138 @@ LEFT JOIN su                 ON b.component_id  = su.sku_id
 LEFT JOIN parent_sales ps    ON b.bom_parent_id = ps.sku_id
 ORDER BY b.bom_parent_id, b.component_id
 ;
+
+
+-- ============================================================
+-- [쿼리 4] 재고수불부 이벤트 상세 (운영부서 요청 포맷)
+-- 각 재고 이벤트를 row 단위로 출력 (일별 집계 아님)
+-- Redash 파라미터: {{조회 기간}} (date range)
+-- 선택 필터: {{거래처ID}}, {{sku_id}}
+--
+-- [구분 매핑 기준 - ref_type 실제값 확인 후 보완 필요]
+-- INCOMING_COMPLETED + ref_type=CLAIM       → 입고 / 반품입고
+-- INCOMING_COMPLETED + ref_type=TRANSFER    → 이동 / 이동(입고)
+-- INCOMING_COMPLETED + 기타                 → 입고 / 구매입고
+-- OUTGOING_COMPLETED + ref_type=TRANSFER    → 이동 / 이동(출고)
+-- OUTGOING_COMPLETED + ref_type=CLAIM       → 출고 / 반출
+-- OUTGOING_COMPLETED + 기타                 → 출고 / 판매출고
+-- ADJUSTMENT_COMPLETED + delta > 0          → 조정 / 재고조정(플러스)
+-- ADJUSTMENT_COMPLETED + delta < 0          → 조정 / 재고조정(마이너스)
+--
+-- [미구현 항목 - 운영 수동 입력 필요]
+-- 상세구분2 불량/CS 구분: stock_usage_ro에 품질 구분 없음
+-- 출발지/도착지 이름: warehouse_id → 창고명 매핑 테이블 미확인
+-- 이동 체번(TR): ref_id 기반 생성 (운영팀 체번 포맷과 다를 수 있음)
+-- ============================================================
+
+WITH
+
+su AS (
+    SELECT
+        DATE(updated_at AT TIME ZONE 'Asia/Seoul') AS dt,
+        id,
+        sku_id,
+        stock_id,
+        type,
+        ref_id,
+        ref_type,
+        before_quantity,
+        after_quantity,
+        delta
+    FROM ods_commerce_production.stock_usage_ro
+    WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul')
+          BETWEEN date '{{조회 기간.start}}' AND date '{{조회 기간.end}}'
+      AND type IN ('INCOMING_COMPLETED', 'OUTGOING_COMPLETED', 'ADJUSTMENT_COMPLETED')
+),
+
+sku_info AS (
+    SELECT
+        s.id          AS sku_id,
+        s.name        AS sku_nm,
+        s.sku_code,
+        s.barcode,
+        s.price_amount,
+        s.currency,
+        sg.biz_partner_id
+    FROM ods_commerce_production.sku_ro s
+    JOIN ods_commerce_production.sku_group_ro sg ON s.sku_group_id = sg.id
+    WHERE s.deleted_at IS NULL AND sg.deleted_at IS NULL
+),
+
+-- stock_id → warehouse_id 매핑 (창고명은 별도 테이블 확인 필요)
+stock_wh AS (
+    SELECT id AS stock_id, warehouse_id
+    FROM ods_commerce_production.stock_ro
+)
+
+SELECT
+    su.dt                                                                 AS "날짜",
+    si.barcode                                                            AS "SKU(KE발급바코드)",
+    si.sku_nm                                                             AS "품명",
+    si.biz_partner_id                                                     AS "거래처ID",
+
+    -- 구분(유형)
+    CASE
+        WHEN su.type = 'ADJUSTMENT_COMPLETED'                             THEN '조정'
+        WHEN su.ref_type = 'TRANSFER'                                     THEN '이동'
+        WHEN su.type = 'INCOMING_COMPLETED'                               THEN '입고'
+        WHEN su.type = 'OUTGOING_COMPLETED'                               THEN '출고'
+    END                                                                   AS "구분(유형)",
+
+    -- 상세구분1
+    CASE
+        WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta >= 0           THEN '재고조정(플러스)'
+        WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta < 0            THEN '재고조정(마이너스)'
+        WHEN su.type = 'INCOMING_COMPLETED'  AND su.ref_type = 'TRANSFER' THEN '이동(입고)'
+        WHEN su.type = 'INCOMING_COMPLETED'  AND su.ref_type = 'CLAIM'    THEN '반품입고'
+        WHEN su.type = 'INCOMING_COMPLETED'                               THEN '구매입고'
+        WHEN su.type = 'OUTGOING_COMPLETED'  AND su.ref_type = 'TRANSFER' THEN '이동(출고)'
+        WHEN su.type = 'OUTGOING_COMPLETED'  AND su.ref_type = 'CLAIM'    THEN '반출'
+        WHEN su.type = 'OUTGOING_COMPLETED'                               THEN '판매출고'
+    END                                                                   AS "상세구분1",
+
+    -- 상세구분2 (불량/CS 자동구분 불가 → 기본 가용, 이동/조정은 별도 표기)
+    CASE
+        WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta >= 0           THEN '재고조정(플러스)'
+        WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta < 0            THEN '재고조정(마이너스)'
+        WHEN su.type = 'INCOMING_COMPLETED'  AND su.ref_type = 'TRANSFER' THEN '이동(입고)'
+        WHEN su.type = 'OUTGOING_COMPLETED'  AND su.ref_type = 'TRANSFER' THEN '이동(출고)'
+        ELSE '가용'
+    END                                                                   AS "상세구분2",
+
+    su.delta                                                              AS "수량",
+
+    -- 관리창고: warehouse_id (창고명 매핑 테이블 확인 후 JOIN 추가 필요)
+    sw.warehouse_id                                                       AS "관리창고(warehouse_id)",
+
+    -- 이동 체번: TRANSFER 거래 식별용 (TR+YYMMDD+ref_id 조합)
+    CASE
+        WHEN su.ref_type = 'TRANSFER'
+        THEN 'TR' || DATE_FORMAT(su.dt, '%y%m%d') || '-' || CAST(su.ref_id AS VARCHAR)
+    END                                                                   AS "이동입출고체번",
+
+    -- 단가/금액: sku_ro.price_amount 기준 (실매입가는 incoming_item_ro.purchase_price 참고)
+    si.price_amount                                                       AS "단가(VAT별도)",
+    si.price_amount * ABS(su.delta)                                       AS "공급가액",
+    ROUND(si.price_amount * ABS(su.delta) * 0.1)                         AS "VAT(부가세)",
+    ROUND(si.price_amount * ABS(su.delta) * 1.1)                         AS "공급대가",
+
+    su.before_quantity                                                    AS "변동전수량",
+    su.after_quantity                                                     AS "변동후수량",
+    su.type                                                               AS "원본type",
+    su.ref_type                                                           AS "원본ref_type",
+    su.ref_id                                                             AS "원본ref_id"
+
+FROM su
+LEFT JOIN sku_info si ON su.sku_id = si.sku_id
+LEFT JOIN stock_wh sw ON su.stock_id = sw.stock_id
+WHERE (
+    '{{거래처ID}}' = ''
+    OR CAST(si.biz_partner_id AS VARCHAR) = '{{거래처ID}}'
+)
+AND (
+    '{{sku_id}}' = ''
+    OR CAST(su.sku_id AS VARCHAR) = '{{sku_id}}'
+)
+ORDER BY su.dt, si.biz_partner_id, su.sku_id, su.id
+;
