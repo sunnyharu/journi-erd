@@ -404,20 +404,20 @@ ORDER BY b.bom_parent_id, b.component_id
 -- Redash 파라미터: {{조회 기간}} (date range)
 -- 선택 필터: {{거래처ID}}, {{sku_id}}
 --
--- [구분 매핑 기준 - ref_type 실제값 확인 후 보완 필요]
--- INCOMING_COMPLETED + ref_type=CLAIM       → 입고 / 반품입고
--- INCOMING_COMPLETED + ref_type=TRANSFER    → 이동 / 이동(입고)
--- INCOMING_COMPLETED + 기타                 → 입고 / 구매입고
--- OUTGOING_COMPLETED + ref_type=TRANSFER    → 이동 / 이동(출고)
--- OUTGOING_COMPLETED + ref_type=CLAIM       → 출고 / 반출
--- OUTGOING_COMPLETED + 기타                 → 출고 / 판매출고
--- ADJUSTMENT_COMPLETED + delta > 0          → 조정 / 재고조정(플러스)
--- ADJUSTMENT_COMPLETED + delta < 0          → 조정 / 재고조정(마이너스)
+-- [구분 매핑 기준 - 실제 ref_type 확인 결과 반영]
+-- ref_type 실제값: INCOMING / OUTGOING / ADJUSTMENT 3종만 존재
+-- TRANSFER, CLAIM 등 별도 ref_type 없음 → 이동/반품 자동구분 불가
 --
--- [미구현 항목 - 운영 수동 입력 필요]
--- 상세구분2 불량/CS 구분: stock_usage_ro에 품질 구분 없음
--- 출발지/도착지 이름: warehouse_id → 창고명 매핑 테이블 미확인
--- 이동 체번(TR): ref_id 기반 생성 (운영팀 체번 포맷과 다를 수 있음)
+-- INCOMING_COMPLETED  → 입고 / 구매입고 / 가용
+-- OUTGOING_COMPLETED  → 출고 / 판매출고 / 가용
+-- ADJUSTMENT_COMPLETED + delta >= 0 → 조정 / 재고조정(플러스)
+-- ADJUSTMENT_COMPLETED + delta <  0 → 조정 / 재고조정(마이너스)
+-- OUTGOING_REQUESTED / OUTGOING_CANCELLED → 제외 (미완료/취소)
+--
+-- [수동 입력 필요 항목]
+-- 상세구분2 불량/CS/이동 구분: DB에서 자동 식별 불가
+-- 출발지/도착지 이름: warehouse_id → 창고명 매핑 테이블 별도 확인 필요
+-- 이동(반품) 체번: 현재 데이터 구조상 자동생성 불가
 -- ============================================================
 
 WITH
@@ -468,30 +468,23 @@ SELECT
 
     -- 구분(유형)
     CASE
-        WHEN su.type = 'ADJUSTMENT_COMPLETED'                             THEN '조정'
-        WHEN su.ref_type = 'TRANSFER'                                     THEN '이동'
         WHEN su.type = 'INCOMING_COMPLETED'                               THEN '입고'
         WHEN su.type = 'OUTGOING_COMPLETED'                               THEN '출고'
+        WHEN su.type = 'ADJUSTMENT_COMPLETED'                             THEN '조정'
     END                                                                   AS "구분(유형)",
 
     -- 상세구분1
     CASE
-        WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta >= 0           THEN '재고조정(플러스)'
-        WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta < 0            THEN '재고조정(마이너스)'
-        WHEN su.type = 'INCOMING_COMPLETED'  AND su.ref_type = 'TRANSFER' THEN '이동(입고)'
-        WHEN su.type = 'INCOMING_COMPLETED'  AND su.ref_type = 'CLAIM'    THEN '반품입고'
         WHEN su.type = 'INCOMING_COMPLETED'                               THEN '구매입고'
-        WHEN su.type = 'OUTGOING_COMPLETED'  AND su.ref_type = 'TRANSFER' THEN '이동(출고)'
-        WHEN su.type = 'OUTGOING_COMPLETED'  AND su.ref_type = 'CLAIM'    THEN '반출'
         WHEN su.type = 'OUTGOING_COMPLETED'                               THEN '판매출고'
+        WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta >= 0           THEN '재고조정(플러스)'
+        WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta <  0           THEN '재고조정(마이너스)'
     END                                                                   AS "상세구분1",
 
-    -- 상세구분2 (불량/CS 자동구분 불가 → 기본 가용, 이동/조정은 별도 표기)
+    -- 상세구분2 (이동/반품/불량/CS 자동구분 불가 → 가용 기본값, 조정은 별도 표기)
     CASE
         WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta >= 0           THEN '재고조정(플러스)'
-        WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta < 0            THEN '재고조정(마이너스)'
-        WHEN su.type = 'INCOMING_COMPLETED'  AND su.ref_type = 'TRANSFER' THEN '이동(입고)'
-        WHEN su.type = 'OUTGOING_COMPLETED'  AND su.ref_type = 'TRANSFER' THEN '이동(출고)'
+        WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta <  0           THEN '재고조정(마이너스)'
         ELSE '가용'
     END                                                                   AS "상세구분2",
 
@@ -500,11 +493,8 @@ SELECT
     -- 관리창고: warehouse_id (창고명 매핑 테이블 확인 후 JOIN 추가 필요)
     sw.warehouse_id                                                       AS "관리창고(warehouse_id)",
 
-    -- 이동 체번: TRANSFER 거래 식별용 (TR+YYMMDD+ref_id 조합)
-    CASE
-        WHEN su.ref_type = 'TRANSFER'
-        THEN 'TR' || DATE_FORMAT(su.dt, '%y%m%d') || '-' || CAST(su.ref_id AS VARCHAR)
-    END                                                                   AS "이동입출고체번",
+    -- 이동 체번: TRANSFER ref_type 없으므로 현재 자동생성 불가 (운영 수동 입력)
+    CAST(NULL AS VARCHAR)                                                 AS "이동입출고체번",
 
     -- 단가/금액: sku_ro.price_amount 기준 (실매입가는 incoming_item_ro.purchase_price 참고)
     si.price_amount                                                       AS "단가(VAT별도)",
