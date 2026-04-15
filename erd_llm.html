@@ -3527,8 +3527,138 @@ async function generateSQL() {
 ## Presto SQL 규칙
 - 테이블 경로: ods_commerce_production.테이블명
 - 날짜 필터: date(컬럼명 AT TIME ZONE 'Asia/Seoul') BETWEEN date('시작일') AND date('종료일')
+- 파티션 필터: date(date_parse(log_date, '%Y%m%d')) BETWEEN date_add('day', -1, date('시작일')) AND date_add('day', 1, date('종료일'))
 - 컬럼 alias는 영문(snake_case)으로 작성하고, 같은 줄 끝에 -- 한글명 주석 추가 (예: SUM(delta) AS total_qty -- 총수량)
 - SQL 외 설명은 -- 주석으로만
+- 아래 베이스 쿼리의 CTE 구조, JOIN 패턴, 날짜 필터 방식을 최대한 참고하여 생성
+
+## 베이스 쿼리 참고 (order.sql)
+\`\`\`sql
+WITH payment AS (
+  SELECT
+    date_format(completed_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d') AS completed_dt
+  , ref_id    AS order_id
+  , user_id
+  , requested_currency AS currency
+  , CAST(amount AS DOUBLE) AS amount
+  FROM payment_ro
+  WHERE date(date_parse(log_date, '%Y%m%d')) BETWEEN date_add('day', -1, date('{{기준일}}')) AND date_add('day', 1, date('{{기준일}}'))
+    AND date(date_format(completed_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d')) BETWEEN date('{{기준일}}') AND date('{{기준일}}')
+    AND status <> 'REQUESTED'
+)
+,orders AS (
+  SELECT
+    id AS order_id
+  , CAST(base_currency_payment_amount AS DOUBLE) AS krw_amount
+  , CASE
+      WHEN payment_currency = 'JPY' THEN regexp_extract(exchange_rates, '100JPY/KRW=([0-9.]+)', 1)
+      WHEN payment_currency = 'USD' THEN regexp_extract(exchange_rates, 'USD/KRW=([0-9.]+)', 1)
+      WHEN payment_currency = 'KRW' THEN '1'
+      ELSE payment_currency
+    END AS exchange_rate
+  FROM orders_ro
+  WHERE date(date_parse(log_date, '%Y%m%d')) BETWEEN date_add('day', -1, date('{{기준일}}')) AND date_add('day', 1, date('{{기준일}}'))
+    AND date(date_format(completed_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d')) BETWEEN date('{{기준일}}') AND date('{{기준일}}')
+    AND status = 'COMPLETED'
+)
+,order_line AS (
+  SELECT
+    id AS order_line_id
+  , order_bundle_id
+  , order_product_id
+  , product_item_id
+  , sku_id
+  , quantity
+  , option_name
+  , product_item_type
+  , CAST(amount AS DOUBLE)               AS line_amount
+  , CAST(base_currency_amount AS DOUBLE) AS line_krw_amount
+  FROM order_line_ro
+  WHERE date(date_parse(log_date, '%Y%m%d')) BETWEEN date_add('day', -1, date('{{기준일}}')) AND date_add('day', 1, date('{{기준일}}'))
+    AND date(date_format(created_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d')) BETWEEN date('{{기준일}}') AND date('{{기준일}}')
+)
+,order_bundle AS (
+  SELECT
+    id AS order_bundle_id
+  , order_id
+  , biz_partner_id
+  , CAST(base_currency_delivery_fee AS DOUBLE) AS krw_delivery_fee
+  , CAST(delivery_fee AS DOUBLE)               AS delivery_fee
+  , bundle_delivery_group_id
+  , receiver_country
+  , receiving_type
+  FROM order_bundle_ro
+  WHERE date(date_parse(log_date, '%Y%m%d')) BETWEEN date_add('day', -1, date('{{기준일}}')) AND date_add('day', 1, date('{{기준일}}'))
+    AND date(date_format(created_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d')) BETWEEN date('{{기준일}}') AND date('{{기준일}}')
+)
+,artist AS (
+  SELECT
+    b.partner_nm     AS partner_nm
+  , a.biz_partner_id AS partner_id
+  , a.artist_id
+  , a.artist_name
+  FROM (
+    SELECT DISTINCT
+      bizpartnerid     AS biz_partner_id
+    , _id              AS artist_id
+    , artistname       AS artist_name
+    FROM artist_ro
+  ) a
+  LEFT JOIN (
+    SELECT
+      bizpartnerid
+    , json_extract_scalar(elem, '$.text') AS partner_nm
+    FROM mall_ro
+    CROSS JOIN UNNEST(i18n) AS t(elem)
+    WHERE json_extract_scalar(elem, '$.type') = 'EN'
+      AND profile = 'prod'
+      AND deletedat IS NULL
+  ) b ON a.biz_partner_id = b.bizpartnerid
+)
+,claim AS (
+  SELECT
+    b.order_id
+  , a.order_line_id
+  , a.order_bundle_id
+  , b.refund_currency
+  , sum(a.quantity) as quantity
+  , max(b.claim_dt) as claim_dt
+  , sum(b.refund_amount) as refund_amount
+  , max_by(b.final_refund_amount,b.claim_dt) as final_refund_amount
+  , sum(b.total_claim_delivery_fee) as total_claim_delivery_fee
+  FROM (
+    SELECT
+      date_format(updated_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d') AS claim_line_dt
+    , order_line_id, order_bundle_id, claim_id
+    , id AS claim_line_id, type, quantity
+    FROM claim_line_ro
+    WHERE date(date_format(updated_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d')) BETWEEN date('{{기준일}}') AND date('{{기준일}}')
+      AND type = 'PURCHASED'
+  ) a
+  LEFT JOIN (
+    SELECT
+      date_format(updated_at AT TIME ZONE 'Asia/Seoul', '%Y-%m-%d') AS claim_dt
+    , order_id, id AS claim_id
+    , CAST(refund_amount AS DOUBLE) AS refund_amount, refund_currency
+    FROM claim_ro
+    WHERE date(date_parse(log_date, '%Y%m%d')) BETWEEN date_add('day', -1, date('{{기준일}}')) AND date_add('day', 1, date('{{기준일}}'))
+      AND refund_amount IS NOT NULL
+  ) b ON a.claim_id = b.claim_id
+  WHERE b.final_refund_amount IS NOT NULL
+  GROUP BY 1,2,3,4
+)
+,coupon AS (
+  SELECT
+    coupon_policy_id, order_line_id
+  , CASE WHEN benefit_type = 'FIXED_AMOUNT_DISCOUNT' THEN 'AMT' WHEN benefit_type = 'FIXED_RATE_DISCOUNT' THEN 'RATE' END AS coupon_discount_type
+  , CASE WHEN coupon_type = 'PRODUCT_COUPON' THEN 'PRODUCT' WHEN coupon_type = 'CHECKOUT_COUPON' THEN 'CHECKOUT' END AS coupon_scope_type
+  , ROUND(CAST(base_currency_applied_discount_amount AS DOUBLE), 0) AS real_discount_amount
+  , json_extract_scalar(lang_elem, '$.text') AS coupon_name
+  FROM order_coupon_discount_ro
+  CROSS JOIN UNNEST(CAST(json_extract(i18n, '$.results[0].lang') AS ARRAY(JSON))) AS t(lang_elem)
+  WHERE json_extract_scalar(lang_elem, '$.type') = 'KO'
+)
+\`\`\`
 
 ## SQLite TEST 규칙
 - 테이블명에서 ods_commerce_production. 접두어 제거
