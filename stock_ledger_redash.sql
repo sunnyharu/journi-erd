@@ -124,13 +124,13 @@ bom_req_agg AS (
 )
 
 SELECT
-    m.dt                                                                     AS "날짜",
+    m.dt,                                                                    -- 날짜
     m.sku_id,
-    si.sku_nm                                                                AS "SKU명",
-    si.sku_code                                                              AS "SKU코드",
-    si.biz_partner_id                                                        AS "거래처ID",
-    si.composition_type                                                      AS "구성유형",
-    COALESCE(bt.bom_type_nm, 'SINGLE')                                       AS "BOM유형",
+    si.sku_nm,                                                               -- SKU명
+    si.sku_code,                                                             -- SKU코드
+    si.biz_partner_id,                                                       -- 거래처ID
+    si.composition_type                                                      AS composition_type, -- 구성유형
+    COALESCE(bt.bom_type_nm, 'SINGLE')                                       AS bom_type,         -- BOM유형
     -- 기초재고 = 전체 초기재고 + 전날까지 누적 순변동 (PARTITION BY sku_id → 멀티창고 연속성)
     uit.total_initial + COALESCE(
         SUM(m.net_delta) OVER (
@@ -138,19 +138,19 @@ SELECT
             ORDER BY m.dt
             ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
         ), 0
-    )                                                                        AS "기초재고",
-    COALESCE(m.incoming,     0)                                              AS "입고수량",
-    COALESCE(m.adjustment,   0)                                              AS "조정수량",
-    COALESCE(m.out_complete, 0)                                              AS "출고완료",
-    COALESCE(m.out_request,  0)                                              AS "출고요청",
-    COALESCE(m.out_cancel,   0)                                              AS "출고취소",
-    COALESCE(m.net_delta,    0)                                              AS "순변동",
+    )                                                                        AS opening_stock,    -- 기초재고
+    COALESCE(m.incoming,     0)                                              AS incoming_qty,     -- 입고수량
+    COALESCE(m.adjustment,   0)                                              AS adjustment_qty,   -- 조정수량
+    COALESCE(m.out_complete, 0)                                              AS out_complete_qty, -- 출고완료
+    COALESCE(m.out_request,  0)                                              AS out_request_qty,  -- 출고요청
+    COALESCE(m.out_cancel,   0)                                              AS out_cancel_qty,   -- 출고취소
+    COALESCE(m.net_delta,    0)                                              AS net_delta,        -- 순변동
     -- 기말재고 = 전체 초기재고 + 당일까지 누적 순변동
     uit.total_initial + SUM(m.net_delta) OVER (
         PARTITION BY m.sku_id
         ORDER BY m.dt
-    )                                                                        AS "기말재고",
-    COALESCE(br.bom_req_qty, 0)                                              AS "BOM전개소요수량"
+    )                                                                        AS closing_stock,    -- 기말재고
+    COALESCE(br.bom_req_qty, 0)                                              AS bom_req_qty       -- BOM전개소요수량
 FROM movement m
 JOIN sku_initial_total uit ON m.sku_id = uit.sku_id
 LEFT JOIN sku_info    si ON m.sku_id = si.sku_id
@@ -268,9 +268,9 @@ total_initial AS (
 )
 
 SELECT
-    m.dt                                                                          AS "날짜",
-    m.biz_partner_id                                                              AS "거래처ID",
-    m.active_sku_cnt                                                              AS "활동SKU수",
+    m.dt,                                                                         -- 날짜
+    m.biz_partner_id,                                                             -- 거래처ID
+    m.active_sku_cnt,                                                             -- 활동SKU수
     -- 기초재고합계 = 기준값(조회시작일직전전체재고) + 전날까지 누적 순변동
     ti.total + COALESCE(
         SUM(m.net_delta) OVER (
@@ -278,18 +278,18 @@ SELECT
             ORDER BY m.dt
             ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
         ), 0
-    )                                                                             AS "기초재고합계",
-    m.incoming                                                                    AS "입고합계",
-    m.adjustment                                                                  AS "조정합계",
-    m.out_complete                                                                AS "출고완료합계",
-    m.out_request                                                                 AS "출고요청합계",
-    m.out_cancel                                                                  AS "출고취소합계",
-    m.net_delta                                                                   AS "순변동합계",
+    )                                                                             AS opening_stock_total, -- 기초재고합계
+    m.incoming                                                                    AS incoming_total,      -- 입고합계
+    m.adjustment                                                                  AS adjustment_total,    -- 조정합계
+    m.out_complete                                                                AS out_complete_total,  -- 출고완료합계
+    m.out_request                                                                 AS out_request_total,   -- 출고요청합계
+    m.out_cancel                                                                  AS out_cancel_total,    -- 출고취소합계
+    m.net_delta,                                                                  -- 순변동합계
     -- 기말재고합계 = 거래처별 기준값 + 당일까지 누적 순변동
     ti.total + SUM(m.net_delta) OVER (
         PARTITION BY m.biz_partner_id
         ORDER BY m.dt
-    )                                                                             AS "기말재고합계"
+    )                                                                             AS closing_stock_total  -- 기말재고합계
 FROM movement m
 JOIN total_initial ti ON m.biz_partner_id = ti.biz_partner_id
 WHERE (
@@ -383,26 +383,26 @@ parent_sales AS (
 )
 
 SELECT
-    pi_parent.biz_partner_id                              AS "거래처ID",
-    pi_parent.barcode                                     AS "BOM완제품_바코드",
-    pi_parent.sku_nm                                      AS "BOM완제품명",
-    pi_parent.sku_code                                    AS "BOM완제품코드",
-    pi_comp.barcode                                       AS "구성요소_바코드",
-    pi_comp.sku_nm                                        AS "구성요소명",
-    pi_comp.sku_code                                      AS "구성요소코드",
-    b.unit_qty                                            AS "단위구성수량",
-    COALESCE(ps.cumul_sales, 0)                           AS "완제품누적판매수량(기간종료일기준)",
-    COALESCE(su.actual_outgoing, 0)                       AS "기간내출고완료수량",
+    pi_parent.biz_partner_id                              AS biz_partner_id,       -- 거래처ID
+    pi_parent.barcode                                     AS parent_barcode,        -- BOM완제품_바코드
+    pi_parent.sku_nm                                      AS parent_sku_nm,         -- BOM완제품명
+    pi_parent.sku_code                                    AS parent_sku_code,       -- BOM완제품코드
+    pi_comp.barcode                                       AS component_barcode,     -- 구성요소_바코드
+    pi_comp.sku_nm                                        AS component_sku_nm,      -- 구성요소명
+    pi_comp.sku_code                                      AS component_sku_code,    -- 구성요소코드
+    b.unit_qty,                                                                     -- 단위구성수량
+    COALESCE(ps.cumul_sales, 0)                           AS cumul_sales,           -- 완제품누적판매수량(기간종료일기준)
+    COALESCE(su.actual_outgoing, 0)                       AS actual_outgoing,       -- 기간내출고완료수량
     CASE
         WHEN b.unit_qty > 0
         THEN COALESCE(su.actual_outgoing, 0) / b.unit_qty
         ELSE 0
-    END                                                   AS "완제품판매역산수량",
+    END                                                   AS implied_parent_sales,  -- 완제품판매역산수량
     CASE
         WHEN pi_comp.sku_id IN (SELECT sku_id FROM barcode_lookup)
         THEN '★ 조회 SKU'
         ELSE ''
-    END                                                   AS "비고"
+    END                                                   AS note                   -- 비고
 FROM bom_all b
 LEFT JOIN sku_info pi_parent ON b.bom_parent_id = pi_parent.sku_id
 LEFT JOIN sku_info pi_comp   ON b.component_id  = pi_comp.sku_id
@@ -483,18 +483,18 @@ partner_info AS (
 )
 
 SELECT
-    su.dt                                                                 AS "날짜",
-    si.barcode                                                            AS "SKU(KE발급바코드)",
-    si.sku_nm                                                             AS "품명",
-    si.biz_partner_id                                                     AS "파트너ID",
-    pi.partner_nm                                                         AS "파트너명",
+    su.dt,                                                                        -- 날짜
+    si.barcode,                                                                   -- SKU(KE발급바코드)
+    si.sku_nm,                                                                    -- 품명
+    si.biz_partner_id,                                                            -- 파트너ID
+    pi.partner_nm,                                                                -- 파트너명
 
-    -- 구분(유형)
+    -- 구분(유형): 입고 / 출고 / 조정
     CASE
         WHEN su.type = 'INCOMING_COMPLETED'                               THEN '입고'
         WHEN su.type = 'OUTGOING_COMPLETED'                               THEN '출고'
         WHEN su.type = 'ADJUSTMENT_COMPLETED'                             THEN '조정'
-    END                                                                   AS "구분(유형)",
+    END                                                                   AS move_type,       -- 구분(유형)
 
     -- 상세구분1
     CASE
@@ -502,33 +502,33 @@ SELECT
         WHEN su.type = 'OUTGOING_COMPLETED'                               THEN '판매출고'
         WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta >= 0           THEN '재고조정(플러스)'
         WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta <  0           THEN '재고조정(마이너스)'
-    END                                                                   AS "상세구분1",
+    END                                                                   AS move_type_detail1, -- 상세구분1
 
     -- 상세구분2 (이동/반품/불량/CS 자동구분 불가 → 가용 기본값)
     CASE
         WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta >= 0           THEN '재고조정(플러스)'
         WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta <  0           THEN '재고조정(마이너스)'
         ELSE '가용'
-    END                                                                   AS "상세구분2",
+    END                                                                   AS move_type_detail2, -- 상세구분2
 
-    su.delta                                                              AS "수량",
-    sw.warehouse_id                                                       AS "창고ID",
+    su.delta                                                              AS qty,             -- 수량
+    sw.warehouse_id,                                                                          -- 창고ID
 
     -- 이동 체번: TRANSFER ref_type 없으므로 자동생성 불가 (운영 수동 입력)
-    CAST(NULL AS VARCHAR)                                                 AS "이동입출고체번",
+    CAST(NULL AS VARCHAR)                                                 AS transfer_no,     -- 이동입출고체번
 
     -- 단가/금액: sku_ro.price_amount = VAT포함 소비자 판매가 기준
     -- 매입원가 필드 없음 → 판매가 역산 사용 (입고/출고 동일 적용)
     -- 단가(VAT별도) = price_amount / 1.1
-    ROUND(TRY_CAST(si.price_amount AS DOUBLE) / 1.1)                     AS "단가(VAT별도)",
-    ROUND(TRY_CAST(si.price_amount AS DOUBLE) / 1.1 * ABS(su.delta))    AS "공급가액",
-    ROUND(TRY_CAST(si.price_amount AS DOUBLE) / 1.1 * ABS(su.delta) * 0.1) AS "VAT(부가세)",
-    ROUND(TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta))           AS "공급대가",
+    ROUND(TRY_CAST(si.price_amount AS DOUBLE) / 1.1)                     AS unit_price,      -- 단가(VAT별도)
+    ROUND(TRY_CAST(si.price_amount AS DOUBLE) / 1.1 * ABS(su.delta))    AS supply_amount,   -- 공급가액
+    ROUND(TRY_CAST(si.price_amount AS DOUBLE) / 1.1 * ABS(su.delta) * 0.1) AS vat,          -- VAT(부가세)
+    ROUND(TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta))           AS total_amount,    -- 공급대가
 
     -- 변동전/후: 당일 첫/마지막 수량 (출고 기준 MAX→MIN, 입고시 역방향 참고용)
-    su.before_quantity                                                    AS "변동전수량",
-    su.after_quantity                                                     AS "변동후수량",
-    su.type                                                               AS "이벤트타입"
+    su.before_quantity,                                                                       -- 변동전수량
+    su.after_quantity,                                                                        -- 변동후수량
+    su.type                                                               AS event_type       -- 이벤트타입
 
 FROM su
 LEFT JOIN stock_wh     sw ON su.stock_id       = sw.stock_id
