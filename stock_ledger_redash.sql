@@ -423,11 +423,12 @@ ORDER BY b.bom_parent_id, b.component_id
 WITH
 
 su AS (
-    -- 날짜 + SKU + type 기준 일별 합산
-    -- 같은 날 동일 상품의 여러 주문을 하나의 행으로 집계
+    -- 날짜 + SKU + 창고(stock_id) + type 기준 일별 합산
+    -- 같은 날 동일 상품·동일 창고의 여러 주문을 하나의 행으로 집계
     SELECT
         DATE(updated_at AT TIME ZONE 'Asia/Seoul') AS dt,
         sku_id,
+        stock_id,
         type,
         SUM(delta)           AS delta,
         MAX(before_quantity) AS before_quantity,  -- 당일 첫 거래 이전 수량 (출고 기준 최대값)
@@ -438,7 +439,13 @@ su AS (
       AND type IN ('INCOMING_COMPLETED', 'OUTGOING_COMPLETED', 'ADJUSTMENT_COMPLETED')
     GROUP BY
         DATE(updated_at AT TIME ZONE 'Asia/Seoul'),
-        sku_id, type
+        sku_id, stock_id, type
+),
+
+-- stock_id → warehouse_id 매핑
+stock_wh AS (
+    SELECT id AS stock_id, warehouse_id
+    FROM ods_commerce_production.stock_ro
 ),
 
 sku_info AS (
@@ -491,9 +498,7 @@ SELECT
     END                                                                   AS "상세구분2",
 
     su.delta                                                              AS "수량",
-
-    -- 관리창고: warehouse 매핑 테이블 확보 시 추가 예정
-    CAST(NULL AS BIGINT)                                                  AS "관리창고(warehouse_id)",
+    sw.warehouse_id                                                       AS "창고ID",
 
     -- 이동 체번: TRANSFER ref_type 없으므로 자동생성 불가 (운영 수동 입력)
     CAST(NULL AS VARCHAR)                                                 AS "이동입출고체번",
@@ -510,6 +515,7 @@ SELECT
     su.type                                                               AS "이벤트타입"
 
 FROM su
+LEFT JOIN stock_wh     sw ON su.stock_id       = sw.stock_id
 LEFT JOIN sku_info     si ON su.sku_id         = si.sku_id
 LEFT JOIN partner_info pi ON si.biz_partner_id = pi.biz_partner_id
 WHERE (
@@ -520,5 +526,5 @@ AND (
     '{{sku_id}}' = ''
     OR CAST(su.sku_id AS VARCHAR) = '{{sku_id}}'
 )
-ORDER BY su.dt, si.biz_partner_id, su.sku_id, su.type
+ORDER BY su.dt, si.biz_partner_id, su.sku_id, sw.warehouse_id, su.type
 ;
