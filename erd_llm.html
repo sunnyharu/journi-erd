@@ -245,62 +245,14 @@
   .tt-section { color: #6c7086; font-size: 10px; font-weight: 600; text-transform: uppercase; margin: 6px 0 2px; letter-spacing: 0.05em; }
   .tt-enums { color: #f9e2af; font-size: 10px; font-family: monospace; }
 
-  /* SQL Query Panel */
-  #query-panel {
-    position: fixed; top: 50px; right: -420px; width: 420px;
-    bottom: 0; background: #181825; border-left: 1px solid #313244;
-    z-index: 90; transition: right 0.3s ease; display: flex; flex-direction: column;
-  }
-  #query-panel.open { right: 0; }
-  #query-panel-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 16px; border-bottom: 1px solid #313244;
-    font-size: 13px; font-weight: 600; color: #cdd6f4; flex-shrink: 0;
-  }
-  #query-panel-close {
-    background: none; border: none; color: #6c7086; cursor: pointer;
-    font-size: 16px; padding: 2px 6px; border-radius: 4px;
-  }
-  #query-panel-close:hover { background: #313244; color: #cdd6f4; }
-  #query-panel-body { flex: 1; overflow-y: auto; padding: 12px; }
-  #query-category-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-  .qcat-btn {
-    padding: 3px 10px; border-radius: 4px; border: 1px solid #313244;
-    background: #1e1e2e; color: #a6adc8; font-size: 11px; cursor: pointer;
-  }
-  .qcat-btn.active { background: #313244; color: #cdd6f4; border-color: #45475a; }
-  .query-item {
-    background: #1e1e2e; border: 1px solid #313244; border-radius: 6px;
-    margin-bottom: 10px; overflow: hidden;
-  }
-  .query-item-header {
-    padding: 8px 12px; font-size: 11px; font-weight: 600;
-    color: #a6e3a1; cursor: pointer; display: flex; justify-content: space-between;
-    align-items: center;
-  }
-  .query-item-header:hover { background: #252535; }
-  .query-item-body { display: none; padding: 0; }
-  .query-item-body.open { display: block; }
-  .query-item pre {
-    margin: 0; padding: 12px; font-family: 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 10.5px; color: #cdd6f4; overflow-x: auto; white-space: pre;
-    background: #11111b; border-top: 1px solid #313244; line-height: 1.6;
-  }
-  .copy-btn {
-    font-size: 10px; padding: 2px 8px; background: #313244;
-    border: none; border-radius: 3px; color: #a6adc8; cursor: pointer;
-  }
-  .copy-btn:hover { background: #45475a; color: #cdd6f4; }
-  #query-panel-btn, #llm-panel-btn, #feedback-panel-btn {
+  #llm-panel-btn {
     padding: 4px 11px; background: #313244; border: 1px solid #45475a;
     border-radius: 5px; font-size: 11px; font-weight: 600;
     cursor: pointer; font-family: inherit; white-space: nowrap;
     flex-shrink: 0;
   }
-  #query-panel-btn:hover, #llm-panel-btn:hover, #feedback-panel-btn:hover { background: #45475a; }
-  #query-panel-btn    { color: #a6e3a1; }
-  #llm-panel-btn      { color: #89b4fa; }
-  #feedback-panel-btn { color: #f38ba8; }
+  #llm-panel-btn:hover { background: #45475a; }
+  #llm-panel-btn { color: #89b4fa; }
 
   /* ── Focus mode layout ──────────────────────────────────────────── */
   #canvas.focus-mode {
@@ -601,7 +553,6 @@
 <div id="header">
   <h1>Database ERD</h1>
   <button id="llm-panel-btn" onclick="toggleLlmPanel()">🤖 AI SQL</button>
-  <button id="query-panel-btn" onclick="toggleQueryPanel()">📋 SQL 쿼리</button>
   <button id="overview-btn" onclick="exitFocusMode()">← Overview</button>
   <div id="col-search-wrap">
     <div id="col-search-container">
@@ -656,17 +607,6 @@
   </div>
 </div>
 
-<!-- SQL Query Panel -->
-<div id="query-panel">
-  <div id="query-panel-header">
-    <span>📋 SQL Query Reference</span>
-    <button id="query-panel-close" onclick="toggleQueryPanel()">✕</button>
-  </div>
-  <div id="query-panel-body">
-    <div id="query-category-tabs"></div>
-    <div id="query-list"></div>
-  </div>
-</div>
 
 <div id="canvas-wrap">
   <div id="canvas">
@@ -2700,229 +2640,6 @@ const ENUM_VALS = {
   },
 };
 
-// ═══════════════════════════════════════════════════════════════════
-// SQL QUERY REFERENCE
-// ═══════════════════════════════════════════════════════════════════
-const SQL_QUERIES = [
-  { category:'주문', title:'주문 전체 조회 (유저 + 결제 포함)',
-    sql:`SELECT
-  o.id           AS order_id,
-  u.member_key   AS user_key,
-  o.payment_amount,
-  o.payment_currency,
-  o.status       AS order_status,
-  o.completed_at,
-  p.payment_method,
-  p.pg_code,
-  p.status       AS payment_status
-FROM orders_ro o
-JOIN users_ro u        ON o.user_id = u.id
-LEFT JOIN payment_ro p ON p.ref_id = o.id AND p.ref_type = 'ORDER'
-WHERE o.status = 'COMPLETED'
-ORDER BY o.created_at DESC;` },
-
-  { category:'주문', title:'주문 라인 상세 (SKU + 상품 스냅샷)',
-    sql:`SELECT
-  o.id           AS order_id,
-  ob.id          AS bundle_id,
-  ol.id          AS order_line_id,
-  op.product_name,
-  op.artist_name,
-  op.mall_name,
-  ol.sku_id,
-  s.name         AS sku_name,
-  s.sku_code,
-  ol.quantity,
-  ol.amount,
-  ol.base_currency_amount,
-  ol.status
-FROM orders_ro o
-JOIN order_bundle_ro ob  ON ob.order_id = o.id
-JOIN order_line_ro ol    ON ol.order_bundle_id = ob.id
-JOIN order_product_ro op ON ol.order_product_id = op.id
-JOIN sku_ro s            ON ol.sku_id = s.id
-ORDER BY o.id, ob.id, ol.id;` },
-
-  { category:'주문', title:'주문 옵션 상세 (order_line_item)',
-    sql:`SELECT
-  ol.id          AS order_line_id,
-  oli.option_name,
-  oli.option_value,
-  oli.option_type,
-  oli.display_order,
-  oli.required
-FROM order_line_ro ol
-JOIN order_line_item_ro oli ON oli.order_line_id = ol.id
-ORDER BY ol.id, oli.display_order;` },
-
-  { category:'재고', title:'SKU별 창고 재고 현황',
-    sql:`SELECT
-  sg.code        AS sku_group_code,
-  s.id           AS sku_id,
-  s.name         AS sku_name,
-  s.sku_code,
-  s.barcode,
-  s.status       AS sku_status,
-  st.warehouse_id,
-  st.available_quantity,
-  st.reserved_quantity,
-  st.physical_quantity
-FROM sku_ro s
-JOIN sku_group_ro sg   ON s.sku_group_id = sg.id
-LEFT JOIN stock_ro st  ON st.sku_id = s.id
-ORDER BY sg.code, s.sku_code;` },
-
-  { category:'재고', title:'재고 변동 이력 조회',
-    sql:`SELECT
-  su.sku_id,
-  s.name         AS sku_name,
-  su.type        AS usage_type,
-  su.ref_type,
-  su.ref_id,
-  su.before_quantity,
-  su.after_quantity,
-  su.delta,
-  su.created_at
-FROM stock_usage_ro su
-JOIN sku_ro s ON su.sku_id = s.id
-ORDER BY su.created_at DESC;` },
-
-  { category:'재고', title:'번들 SKU 구성 조회',
-    sql:`SELECT
-  parent.id     AS parent_sku_id,
-  parent.name   AS parent_sku_name,
-  parent.sku_code,
-  child.id      AS child_sku_id,
-  child.name    AS child_sku_name,
-  child.sku_code AS child_sku_code,
-  b.quantity
-FROM bundled_sku_ro b
-JOIN sku_ro parent ON b.sku_id = parent.id
-JOIN sku_ro child  ON b.bundled_sku_id = child.id;` },
-
-  { category:'클레임', title:'클레임 현황 (취소/교환)',
-    sql:`SELECT
-  c.id           AS claim_id,
-  c.claim_type,
-  c.claim_reason,
-  c.status       AS claim_status,
-  o.id           AS order_id,
-  cl.sku_id,
-  sk.name        AS sku_name,
-  cl.quantity,
-  c.refund_amount,
-  c.refund_currency,
-  c.completed_at,
-  pc.amount      AS canceled_payment
-FROM claim_ro c
-JOIN orders_ro o          ON c.order_id = o.id
-JOIN claim_line_ro cl     ON cl.claim_id = c.id
-JOIN sku_ro sk            ON cl.sku_id = sk.id
-LEFT JOIN payment_cancel_ro pc ON pc.claim_id = c.id
-ORDER BY c.created_at DESC;` },
-
-  { category:'배송', title:'출고 → 배송 현황 조회',
-    sql:`SELECT
-  out.id         AS outgoing_id,
-  out.order_id,
-  out.status     AS outgoing_status,
-  out.method,
-  d.id           AS delivery_id,
-  d.status       AS delivery_status,
-  d.region,
-  d.started_at,
-  d.completed_at,
-  oi.sku_id,
-  sk.name        AS sku_name,
-  oi.quantity
-FROM outgoing_ro out
-LEFT JOIN delivery_ro d       ON d.outgoing_id = out.id
-JOIN outgoing_item_ro oi      ON oi.outgoing_id = out.id
-JOIN sku_ro sk                ON oi.sku_id = sk.id
-ORDER BY out.created_at DESC;` },
-
-  { category:'배송', title:'입고 현황 (반품 입고 포함)',
-    sql:`SELECT
-  i.id           AS incoming_id,
-  i.type,
-  i.status,
-  i.claim_id,
-  i.warehouse_id,
-  ii.sku_id,
-  sk.name        AS sku_name,
-  ii.requested_quantity,
-  ii.incoming_quantity,
-  ii.damaged_quantity,
-  ii.missing_quantity,
-  i.completed_at
-FROM incoming_ro i
-JOIN incoming_item_ro ii ON ii.incoming_id = i.id
-JOIN sku_ro sk           ON ii.sku_id = sk.id
-ORDER BY i.created_at DESC;` },
-
-  { category:'쿠폰', title:'쿠폰 적용 할인 내역',
-    sql:`SELECT
-  ocd.order_line_id,
-  ol.order_id,
-  ocd.coupon_type,
-  ocd.benefit_type,
-  ocd.discount_rate,
-  ocd.applied_discount_amount,
-  ocd.applied_currency,
-  cr.status      AS coupon_status,
-  cr.expiredat   AS coupon_expiry
-FROM order_coupon_discount_ro ocd
-JOIN order_line_ro ol     ON ocd.order_line_id = ol.id
-JOIN coupon_ro cr         ON ocd.coupon_id = cr._id
-JOIN coupon_policy_ro cp  ON ocd.coupon_policy_id = cp._id
-ORDER BY ol.order_id;` },
-
-  { category:'결제', title:'결제 상세 (PG + 카드정보)',
-    sql:`SELECT
-  p.id           AS payment_id,
-  p.ref_id       AS order_id,
-  p.payment_method,
-  p.pg_code,
-  p.amount,
-  p.canceled_amount,
-  p.status,
-  pd.pg_payment_method_name,
-  pd.bank_name,
-  pd.card_installment,
-  p.requested_at,
-  p.completed_at
-FROM payment_ro p
-LEFT JOIN payment_detail_ro pd ON pd.payment_id = p.id
-WHERE p.ref_type = 'ORDER'
-ORDER BY p.created_at DESC;` },
-
-  { category:'상품', title:'아티스트 × 상품 × 판매 수량',
-    sql:`SELECT
-  a._id          AS artist_id,
-  a.artistname AS artist_name,
-  m._id          AS mall_id,
-  p._id          AS product_id,
-  p.status       AS product_status,
-  p.saletype,
-  COALESCE(sq.quantity, 0) AS sold_quantity
-FROM artist_ro a
-JOIN mall_ro m            ON a.mallid = m._id
-JOIN product_ro p         ON p.artistid = a._id AND p.mallid = m._id
-LEFT JOIN sold_quantity_ro sq ON sq.productid = p._id
-ORDER BY sold_quantity DESC;` },
-
-  { category:'국제배송', title:'국가별 배송 Zone + 요금 조회',
-    sql:`SELECT
-  z.country,
-  z.zone_code,
-  f.min_weight,
-  f.fee           AS delivery_fee_krw,
-  d.dim_factor
-FROM zone_country_mapping_ro z
-JOIN international_delivery_fee_ro f ON f.zone_code = z.zone_code
-JOIN international_dim_factor_ro d   ON d.zone_code = z.zone_code
-ORDER BY z.country, f.min_weight;` },
-];
 
 // ═══════════════════════════════════════════════════════════════════
 // BUILD FK INDEX
@@ -3734,52 +3451,6 @@ window.addEventListener('load', () => {
 // Also sync on resize
 new ResizeObserver(() => syncSvgSize()).observe(canvas);
 
-// ═══════════════════════════════════════════════════════════════════
-// SQL QUERY PANEL
-// ═══════════════════════════════════════════════════════════════════
-function toggleQueryPanel() {
-  document.getElementById('query-panel').classList.toggle('open');
-}
-
-(function initQueryPanel() {
-  const categories = [...new Set(SQL_QUERIES.map(q => q.category))];
-  let activecat = categories[0];
-
-  const tabsEl = document.getElementById('query-category-tabs');
-  const listEl = document.getElementById('query-list');
-
-  function renderTabs() {
-    tabsEl.innerHTML = categories.map(c =>
-      `<button class="qcat-btn${c===activecat?' active':''}" onclick="setQCat('${c}')">${c}</button>`
-    ).join('');
-  }
-
-  function renderList() {
-    const items = SQL_QUERIES.filter(q => q.category === activecat);
-    listEl.innerHTML = items.map((q, i) => `
-      <div class="query-item">
-        <div class="query-item-header" onclick="toggleQuery(this)">
-          <span>${q.title}</span>
-          <button class="copy-btn" onclick="event.stopPropagation();copyQuery(${SQL_QUERIES.indexOf(q)})">복사</button>
-        </div>
-        <div class="query-item-body">
-          <pre>${q.sql}</pre>
-        </div>
-      </div>`).join('');
-  }
-
-  window.setQCat = function(cat) { activecat = cat; renderTabs(); renderList(); };
-  window.toggleQuery = function(hdr) { hdr.nextElementSibling.classList.toggle('open'); };
-  window.copyQuery = function(idx) {
-    navigator.clipboard.writeText(SQL_QUERIES[idx].sql).then(() => {
-      const btn = document.querySelectorAll('.copy-btn')[SQL_QUERIES.filter(q=>q.category===activecat).indexOf(SQL_QUERIES[idx])];
-      if (btn) { btn.textContent = '복사됨!'; setTimeout(() => btn.textContent = '복사', 1500); }
-    });
-  };
-
-  renderTabs();
-  renderList();
-})();
 
 /* ── LLM SQL 생성 ──────────────────────────────────────────────────── */
 
