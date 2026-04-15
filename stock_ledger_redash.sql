@@ -503,11 +503,13 @@ SELECT
     -- 이동 체번: TRANSFER ref_type 없으므로 자동생성 불가 (운영 수동 입력)
     CAST(NULL AS VARCHAR)                                                 AS "이동입출고체번",
 
-    -- 단가/금액: sku_ro.price_amount 기준 (varchar → double 변환)
-    TRY_CAST(si.price_amount AS DOUBLE)                                   AS "단가(VAT별도)",
-    TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta)                  AS "공급가액",
-    ROUND(TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta) * 0.1)    AS "VAT(부가세)",
-    ROUND(TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta) * 1.1)    AS "공급대가",
+    -- 단가/금액: sku_ro.price_amount = VAT포함 소비자 판매가 기준
+    -- 매입원가 필드 없음 → 판매가 역산 사용 (입고/출고 동일 적용)
+    -- 단가(VAT별도) = price_amount / 1.1
+    ROUND(TRY_CAST(si.price_amount AS DOUBLE) / 1.1)                     AS "단가(VAT별도)",
+    ROUND(TRY_CAST(si.price_amount AS DOUBLE) / 1.1 * ABS(su.delta))    AS "공급가액",
+    ROUND(TRY_CAST(si.price_amount AS DOUBLE) / 1.1 * ABS(su.delta) * 0.1) AS "VAT(부가세)",
+    ROUND(TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta))           AS "공급대가",
 
     -- 변동전/후: 당일 첫/마지막 수량 (출고 기준 MAX→MIN, 입고시 역방향 참고용)
     su.before_quantity                                                    AS "변동전수량",
