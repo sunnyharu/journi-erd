@@ -305,8 +305,8 @@ ORDER BY m.biz_partner_id, m.dt
 -- 특정 SKU가 속한 BOM 완제품과 전체 구성요소 목록을 보여줌
 --
 -- [사용법]
--- sku_id: 완제품 또는 구성요소 sku_id 입력
---         → 해당 SKU가 속한 모든 BOM 세트 구조를 출력
+-- barcode: 완제품 또는 구성요소의 바코드 입력 (sku_ro.barcode 기준)
+--          → 해당 SKU가 속한 모든 BOM 세트 구조를 출력
 -- 조회 기간: 기간 내 실제 출고완료 수량도 함께 표시
 --
 -- [출력 행 구성]
@@ -316,16 +316,24 @@ ORDER BY m.biz_partner_id, m.dt
 
 WITH
 
+-- 바코드 → sku_id 변환
+barcode_lookup AS (
+    SELECT id AS sku_id
+    FROM ods_commerce_production.sku_ro
+    WHERE barcode = '{{barcode}}'
+      AND deleted_at IS NULL
+),
+
 -- 입력 SKU가 완제품인 경우 → 해당 sku_id가 부모
 -- 입력 SKU가 구성요소인 경우 → bundled_sku_ro에서 부모(sku_id) 찾기
 parent_ids AS (
     SELECT sku_id AS bom_parent_id
     FROM ods_commerce_production.bundled_sku_ro
-    WHERE sku_id = CAST('{{sku_id}}' AS BIGINT)           -- 완제품으로 직접 입력한 경우
+    WHERE sku_id = (SELECT sku_id FROM barcode_lookup)           -- 완제품으로 직접 입력한 경우
     UNION
     SELECT sku_id AS bom_parent_id
     FROM ods_commerce_production.bundled_sku_ro
-    WHERE bundled_sku_id = CAST('{{sku_id}}' AS BIGINT)   -- 구성요소로 입력한 경우 → 부모 찾기
+    WHERE bundled_sku_id = (SELECT sku_id FROM barcode_lookup)   -- 구성요소로 입력한 경우 → 부모 찾기
 ),
 
 -- 해당 부모(들)의 전체 구성요소 목록
@@ -385,7 +393,7 @@ SELECT
         ELSE 0
     END                                                   AS "완제품판매역산수량",
     CASE
-        WHEN b.component_id = CAST('{{sku_id}}' AS BIGINT)
+        WHEN b.component_id = (SELECT sku_id FROM barcode_lookup)
         THEN '★ 조회 SKU'
         ELSE ''
     END                                                   AS "비고"
