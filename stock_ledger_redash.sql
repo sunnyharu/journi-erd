@@ -324,16 +324,29 @@ barcode_lookup AS (
       AND deleted_at IS NULL
 ),
 
--- 입력 SKU가 완제품인 경우 → 해당 sku_id가 부모
--- 입력 SKU가 구성요소인 경우 → bundled_sku_ro에서 부모(sku_id) 찾기
+-- SKU 마스터 (완제품/구성요소 이름+바코드 조회용)
+sku_info AS (
+    SELECT
+        s.id             AS sku_id,
+        s.name           AS sku_nm,
+        s.sku_code,
+        COALESCE(s.barcode, s.sku_code) AS barcode,  -- 완제품은 barcode 없는 경우 sku_code로 대체
+        sg.biz_partner_id
+    FROM ods_commerce_production.sku_ro s
+    JOIN ods_commerce_production.sku_group_ro sg ON s.sku_group_id = sg.id
+    WHERE s.deleted_at IS NULL AND sg.deleted_at IS NULL
+),
+
+-- 입력 바코드가 완제품인 경우 → 해당 sku_id가 부모
+-- 입력 바코드가 구성요소인 경우 → bundled_sku_ro에서 부모(sku_id) 찾기
 parent_ids AS (
-    SELECT sku_id AS bom_parent_id
-    FROM ods_commerce_production.bundled_sku_ro
-    WHERE sku_id = (SELECT sku_id FROM barcode_lookup)           -- 완제품으로 직접 입력한 경우
+    SELECT b.sku_id AS bom_parent_id
+    FROM ods_commerce_production.bundled_sku_ro b
+    JOIN barcode_lookup bl ON b.sku_id = bl.sku_id          -- 완제품으로 직접 입력한 경우
     UNION
-    SELECT sku_id AS bom_parent_id
-    FROM ods_commerce_production.bundled_sku_ro
-    WHERE bundled_sku_id = (SELECT sku_id FROM barcode_lookup)   -- 구성요소로 입력한 경우 → 부모 찾기
+    SELECT b.sku_id AS bom_parent_id
+    FROM ods_commerce_production.bundled_sku_ro b
+    JOIN barcode_lookup bl ON b.bundled_sku_id = bl.sku_id  -- 구성요소로 입력한 경우 → 부모 찾기
 ),
 
 -- 해당 부모(들)의 전체 구성요소 목록
@@ -341,7 +354,7 @@ bom_all AS (
     SELECT
         b.sku_id         AS bom_parent_id,
         b.bundled_sku_id AS component_id,
-        b.quantity        AS unit_qty
+        b.quantity       AS unit_qty
     FROM ods_commerce_production.bundled_sku_ro b
     JOIN parent_ids p ON b.sku_id = p.bom_parent_id
 ),
@@ -357,7 +370,6 @@ su AS (
 ),
 
 -- 완제품(BOM 부모 SKU) 기준 조회기간.end 이전 누적 판매수량
--- order_line_ro 기준: status = 'COMPLETED'(주문완료), deleted_at IS NULL
 parent_sales AS (
     SELECT sku_id, SUM(quantity) AS cumul_sales
     FROM ods_commerce_production.order_line_ro
@@ -366,14 +378,6 @@ parent_sales AS (
       AND deleted_at IS NULL
       AND sku_id IN (SELECT bom_parent_id FROM parent_ids)
     GROUP BY sku_id
-),
-
--- SKU 마스터 (완제품/구성요소 이름 조회용)
-sku_info AS (
-    SELECT s.id AS sku_id, s.name AS sku_nm, s.sku_code, s.barcode, sg.biz_partner_id
-    FROM ods_commerce_production.sku_ro s
-    JOIN ods_commerce_production.sku_group_ro sg ON s.sku_group_id = sg.id
-    WHERE s.deleted_at IS NULL AND sg.deleted_at IS NULL
 )
 
 SELECT
@@ -385,7 +389,7 @@ SELECT
     pi_comp.sku_nm                                        AS "구성요소명",
     pi_comp.sku_code                                      AS "구성요소코드",
     b.unit_qty                                            AS "단위구성수량",
-    COALESCE(ps.cumul_sales, 0)                            AS "완제품누적판매수량(기간종료일기준)",
+    COALESCE(ps.cumul_sales, 0)                           AS "완제품누적판매수량(기간종료일기준)",
     COALESCE(su.actual_outgoing, 0)                       AS "기간내출고완료수량",
     CASE
         WHEN b.unit_qty > 0
@@ -393,7 +397,7 @@ SELECT
         ELSE 0
     END                                                   AS "완제품판매역산수량",
     CASE
-        WHEN b.component_id = (SELECT sku_id FROM barcode_lookup)
+        WHEN pi_comp.sku_id IN (SELECT sku_id FROM barcode_lookup)
         THEN '★ 조회 SKU'
         ELSE ''
     END                                                   AS "비고"
