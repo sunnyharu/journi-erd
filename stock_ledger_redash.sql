@@ -423,24 +423,22 @@ ORDER BY b.bom_parent_id, b.component_id
 WITH
 
 su AS (
-    -- ref_id + sku_id 기준 집계: 동일 거래가 멀티창고로 나뉜 경우 하나로 합산
-    -- before/after는 창고별 합산 → 전체 재고 기준 변동전/후 수량
+    -- 날짜 + SKU + type 기준 일별 합산
+    -- 같은 날 동일 상품의 여러 주문을 하나의 행으로 집계
     SELECT
         DATE(updated_at AT TIME ZONE 'Asia/Seoul') AS dt,
         sku_id,
         type,
-        ref_id,
-        ref_type,
         SUM(delta)           AS delta,
-        SUM(before_quantity) AS before_quantity,
-        SUM(after_quantity)  AS after_quantity
+        MAX(before_quantity) AS before_quantity,  -- 당일 첫 거래 이전 수량 (출고 기준 최대값)
+        MIN(after_quantity)  AS after_quantity    -- 당일 마지막 거래 이후 수량 (출고 기준 최소값)
     FROM ods_commerce_production.stock_usage_ro
     WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul')
           BETWEEN date '{{조회 기간.start}}' AND date '{{조회 기간.end}}'
       AND type IN ('INCOMING_COMPLETED', 'OUTGOING_COMPLETED', 'ADJUSTMENT_COMPLETED')
     GROUP BY
         DATE(updated_at AT TIME ZONE 'Asia/Seoul'),
-        sku_id, type, ref_id, ref_type
+        sku_id, type
 ),
 
 sku_info AS (
@@ -506,15 +504,13 @@ SELECT
     ROUND(TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta) * 0.1)    AS "VAT(부가세)",
     ROUND(TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta) * 1.1)    AS "공급대가",
 
-    -- 변동전/후: 멀티창고 합산 기준 (창고별 합산으로 전체 재고 기준 표시)
+    -- 변동전/후: 당일 첫/마지막 수량 (출고 기준 MAX→MIN, 입고시 역방향 참고용)
     su.before_quantity                                                    AS "변동전수량",
     su.after_quantity                                                     AS "변동후수량",
-    su.type                                                               AS "이벤트타입",
-    su.ref_type                                                           AS "참조타입",
-    su.ref_id                                                             AS "참조ID"
+    su.type                                                               AS "이벤트타입"
 
 FROM su
-LEFT JOIN sku_info    si ON su.sku_id        = si.sku_id
+LEFT JOIN sku_info     si ON su.sku_id         = si.sku_id
 LEFT JOIN partner_info pi ON si.biz_partner_id = pi.biz_partner_id
 WHERE (
     '{{거래처ID}}' = ''
@@ -524,5 +520,5 @@ AND (
     '{{sku_id}}' = ''
     OR CAST(su.sku_id AS VARCHAR) = '{{sku_id}}'
 )
-ORDER BY su.dt, si.biz_partner_id, su.sku_id, su.ref_id
+ORDER BY su.dt, si.biz_partner_id, su.sku_id, su.type
 ;
