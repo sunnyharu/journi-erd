@@ -291,13 +291,16 @@
     border: none; border-radius: 3px; color: #a6adc8; cursor: pointer;
   }
   .copy-btn:hover { background: #45475a; color: #cdd6f4; }
-  #query-panel-btn {
-    position: fixed; top: 12px; right: 16px; z-index: 110;
-    padding: 5px 12px; background: #313244; border: 1px solid #45475a;
-    border-radius: 5px; color: #a6e3a1; font-size: 11px; font-weight: 600;
-    cursor: pointer; font-family: inherit;
+  #query-panel-btn, #llm-panel-btn, #feedback-panel-btn {
+    padding: 4px 11px; background: #313244; border: 1px solid #45475a;
+    border-radius: 5px; font-size: 11px; font-weight: 600;
+    cursor: pointer; font-family: inherit; white-space: nowrap;
+    flex-shrink: 0;
   }
-  #query-panel-btn:hover { background: #45475a; }
+  #query-panel-btn:hover, #llm-panel-btn:hover, #feedback-panel-btn:hover { background: #45475a; }
+  #query-panel-btn    { color: #a6e3a1; }
+  #llm-panel-btn      { color: #89b4fa; }
+  #feedback-panel-btn { color: #f38ba8; }
 
   /* ── Focus mode layout ──────────────────────────────────────────── */
   #canvas.focus-mode {
@@ -463,13 +466,6 @@
   }
 
   /* ── LLM SQL 생성 패널 ─────────────────────────────────────────────── */
-  #llm-panel-btn {
-    position: fixed; top: 12px; right: 130px; z-index: 110;
-    padding: 5px 12px; background: #313244; border: 1px solid #45475a;
-    border-radius: 5px; color: #89b4fa; font-size: 11px; font-weight: 600;
-    cursor: pointer; font-family: inherit;
-  }
-  #llm-panel-btn:hover { background: #45475a; }
 
   #llm-panel {
     position: fixed; top: 50px; right: -460px; width: 440px;
@@ -563,12 +559,110 @@
     content: 'SQL이 여기에 표시됩니다...';
     color: #45475a; font-style: italic;
   }
+
+  /* ── 샘플 결과 테이블 ─────────────────────────────────────────────── */
+  #llm-result-wrap {
+    display: none; flex-direction: column;
+    background: #11111b; border: 1px solid #313244; border-radius: 6px;
+    overflow: hidden; max-height: 240px;
+  }
+  #llm-result-wrap.visible { display: flex; }
+  #llm-result-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 12px; border-bottom: 1px solid #1e1e2e;
+    font-size: 10px; color: #a6e3a1; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0;
+  }
+  #llm-result-table-wrap { overflow: auto; flex: 1; }
+  #llm-result-table {
+    border-collapse: collapse; font-size: 10.5px; width: 100%;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+  }
+  #llm-result-table th {
+    background: #1e1e2e; color: #89b4fa; font-weight: 600;
+    padding: 5px 10px; border: 1px solid #313244;
+    text-align: left; white-space: nowrap;
+  }
+  #llm-result-table td {
+    color: #cdd6f4; padding: 4px 10px; border: 1px solid #1e1e2e;
+    white-space: nowrap;
+  }
+  #llm-result-table tr:nth-child(even) td { background: #181825; }
+  #llm-run-btn {
+    padding: 2px 8px; background: #313244; border: none; border-radius: 3px;
+    color: #a6e3a1; font-size: 10px; cursor: pointer;
+  }
+  #llm-run-btn:hover { background: #45475a; }
+
+  /* ── 피드백 패널 ──────────────────────────────────────────────────── */
+  #feedback-panel-btn { color: #f38ba8; }
+  #feedback-panel {
+    position: fixed; top: 50px; right: -400px; width: 380px;
+    bottom: 0; background: #181825; border-left: 1px solid #313244;
+    z-index: 88; transition: right 0.3s ease;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #feedback-panel.open { right: 0; }
+  #feedback-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; border-bottom: 1px solid #313244;
+    font-size: 12px; font-weight: 700; color: #f38ba8; flex-shrink: 0;
+  }
+  #feedback-panel-close {
+    background: none; border: none; color: #6c7086; font-size: 16px;
+    cursor: pointer; padding: 2px 6px; border-radius: 4px;
+  }
+  #feedback-panel-close:hover { background: #313244; color: #cdd6f4; }
+  #feedback-panel-body {
+    flex: 1; overflow-y: auto; padding: 14px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .fb-label {
+    display: block; font-size: 10px; color: #6c7086; margin-bottom: 5px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  #fb-table-sel, #fb-col-sel, #fb-category {
+    width: 100%; background: #11111b; border: 1px solid #313244; border-radius: 5px;
+    color: #cdd6f4; font-size: 11px; padding: 6px 8px; font-family: inherit;
+  }
+  #fb-table-sel:focus, #fb-col-sel:focus, #fb-category:focus {
+    outline: none; border-color: #f38ba8;
+  }
+  #fb-text {
+    width: 100%; box-sizing: border-box;
+    background: #11111b; border: 1px solid #313244; border-radius: 6px;
+    color: #cdd6f4; font-size: 12px; padding: 10px; font-family: inherit;
+    resize: vertical; min-height: 120px; line-height: 1.5;
+  }
+  #fb-text:focus { outline: none; border-color: #f38ba8; }
+  #fb-text::placeholder { color: #45475a; }
+  #fb-send-btn {
+    width: 100%; padding: 9px; background: #f38ba8; border: none;
+    border-radius: 6px; color: #1e1e2e; font-size: 12px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+  }
+  #fb-send-btn:hover { background: #eba0ac; }
+  #fb-status { font-size: 11px; color: #a6e3a1; text-align: center; min-height: 16px; }
+  #fb-preview {
+    background: #11111b; border: 1px solid #313244; border-radius: 6px;
+    padding: 10px; font-size: 10.5px; color: #a6adc8;
+    font-family: monospace; white-space: pre-wrap; line-height: 1.5;
+    display: none; max-height: 180px; overflow-y: auto;
+  }
+  #fb-preview.visible { display: block; }
+  .fb-guide {
+    font-size: 10px; color: #6c7086; line-height: 1.5; padding: 8px;
+    background: #1e1e2e; border-radius: 5px;
+  }
 </style>
 </head>
 <body>
 
 <div id="header">
   <h1>Database ERD</h1>
+  <button id="llm-panel-btn" onclick="toggleLlmPanel()">🤖 AI SQL</button>
+  <button id="query-panel-btn" onclick="toggleQueryPanel()">📋 SQL 쿼리</button>
+  <button id="feedback-panel-btn" class="panel-toggle-btn" onclick="toggleFeedbackPanel()">💬 피드백</button>
   <button id="overview-btn" onclick="exitFocusMode()">← Overview</button>
   <div id="col-search-wrap">
     <div id="col-search-container">
@@ -578,8 +672,6 @@
     </div>
     <span id="col-search-count"></span>
   </div>
-  <button id="query-panel-btn" onclick="toggleQueryPanel()">📋 SQL 쿼리</button>
-  <button id="llm-panel-btn" onclick="toggleLlmPanel()">🤖 AI SQL</button>
 </div>
 
 <!-- LLM SQL 생성 패널 -->
@@ -604,11 +696,67 @@
     <button id="llm-generate-btn" onclick="generateSQL()">SQL 생성</button>
     <div id="llm-output-wrap">
       <div id="llm-output-header">
-        <span>생성된 SQL</span>
-        <button id="llm-copy-btn" onclick="copyLlmSQL()">복사</button>
+        <span>생성된 SQL (Presto)</span>
+        <div style="display:flex;gap:6px">
+          <button id="llm-run-btn" onclick="runSampleSQL()">▶ 샘플 실행</button>
+          <button id="llm-copy-btn" onclick="copyLlmSQL()">복사</button>
+        </div>
       </div>
       <pre id="llm-output"></pre>
     </div>
+    <div id="llm-result-wrap">
+      <div id="llm-result-header">
+        <span>📊 샘플 실행 결과</span>
+        <span id="llm-result-count" style="color:#6c7086;font-weight:400"></span>
+      </div>
+      <div id="llm-result-table-wrap">
+        <table id="llm-result-table"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 피드백 패널 -->
+<div id="feedback-panel">
+  <div id="feedback-panel-header">
+    <span>💬 ERD 피드백 / 보완 요청</span>
+    <button id="feedback-panel-close" onclick="toggleFeedbackPanel()">✕</button>
+  </div>
+  <div id="feedback-panel-body">
+    <div class="fb-guide">
+      스키마 오류, 컬럼 설명 수정, 샘플 데이터 추가 등을 입력하면<br>
+      Claude Code 채팅창에 붙여넣기할 수 있는 형식으로 복사됩니다.
+    </div>
+    <div>
+      <label class="fb-label">카테고리</label>
+      <select id="fb-category">
+        <option value="컬럼 설명 수정">컬럼 설명 수정</option>
+        <option value="샘플 데이터 추가">샘플 데이터 추가</option>
+        <option value="테이블 관계(FK) 수정">테이블 관계(FK) 수정</option>
+        <option value="쿼리 생성 오류 신고">쿼리 생성 오류 신고</option>
+        <option value="새 테이블/컬럼 추가">새 테이블/컬럼 추가</option>
+        <option value="기타">기타</option>
+      </select>
+    </div>
+    <div>
+      <label class="fb-label">테이블 (선택)</label>
+      <select id="fb-table-sel">
+        <option value="">-- 전체/해당없음 --</option>
+      </select>
+    </div>
+    <div>
+      <label class="fb-label">컬럼 (선택)</label>
+      <select id="fb-col-sel">
+        <option value="">-- 선택 안함 --</option>
+      </select>
+    </div>
+    <div>
+      <label class="fb-label">내용</label>
+      <textarea id="fb-text" placeholder="예: stock_usage_ro의 delta 컬럼은 음수가 출고, 양수가 입고를 의미합니다.&#10;예: sku_group_ro 샘플 데이터: id=1, biz_partner_id=101, name=&quot;테스트상품그룹&quot;"></textarea>
+    </div>
+    <button id="fb-send-btn" onclick="copyFeedback()">📋 복사 → Claude Code에 붙여넣기</button>
+    <div id="fb-status"></div>
+    <pre id="fb-preview"></pre>
   </div>
 </div>
 
@@ -2957,8 +3105,8 @@ const header = document.getElementById('header');
 const domainVisible = {};
 DOMAIN_ORDER.forEach(d => domainVisible[d] = true);
 
-// Build domain filter buttons
-const h1 = header.querySelector('h1');
+// Build domain filter buttons (검색창 앞에 삽입 → 검색창이 항상 오른쪽 끝 유지)
+const colSearchWrap = document.getElementById('col-search-wrap');
 DOMAIN_ORDER.forEach(domain => {
   const color = DOMAIN_COLORS[domain];
   const btn = document.createElement('button');
@@ -2967,7 +3115,7 @@ DOMAIN_ORDER.forEach(domain => {
   btn.textContent = domain;
   btn.dataset.domain = domain;
   btn.addEventListener('click', () => toggleDomain(domain, btn));
-  header.appendChild(btn);
+  header.insertBefore(btn, colSearchWrap);
 });
 
 function toggleDomain(domain, btn) {
@@ -3739,9 +3887,8 @@ function toggleQueryPanel() {
 
 /* ── LLM SQL 생성 ──────────────────────────────────────────────────── */
 
-function toggleLlmPanel() {
-  document.getElementById('llm-panel').classList.toggle('open');
-}
+function toggleLlmPanel()      { document.getElementById('llm-panel').classList.toggle('open'); }
+function toggleFeedbackPanel() { document.getElementById('feedback-panel').classList.toggle('open'); }
 
 function saveApiKey() {
   const key = document.getElementById('llm-apikey').value.trim();
@@ -3769,37 +3916,65 @@ function buildSchemaContext() {
   }).join('\n\n');
 }
 
+// 현재 생성된 SQLite 테스트 SQL 저장용
+let _sqliteTestSQL = '';
+
 async function generateSQL() {
   const apiKey = localStorage.getItem('claude_api_key') || document.getElementById('llm-apikey').value.trim();
   const userQuery = document.getElementById('llm-input').value.trim();
 
-  if (!apiKey) {
-    alert('Claude API Key를 입력하고 저장해주세요.');
-    return;
-  }
-  if (!userQuery) {
-    alert('분석 요건을 입력해주세요.');
-    return;
-  }
+  if (!apiKey) { alert('Claude API Key를 입력하고 저장해주세요.'); return; }
+  if (!userQuery) { alert('분석 요건을 입력해주세요.'); return; }
 
-  const btn = document.getElementById('llm-generate-btn');
+  const btn    = document.getElementById('llm-generate-btn');
   const output = document.getElementById('llm-output');
+  const resultWrap = document.getElementById('llm-result-wrap');
   btn.disabled = true;
   btn.textContent = '생성 중...';
   output.textContent = '';
+  resultWrap.classList.remove('visible');
+  _sqliteTestSQL = '';
 
-  const systemPrompt = `당신은 Presto SQL 전문가입니다. 아래 ERD 스키마를 바탕으로 자연어 요건을 Presto SQL 쿼리로 변환해주세요.
+  // 샘플 데이터 요약 (ENUM_VALS 기준)
+  const sampleSummary = TABLES.map(t => {
+    const ev = ENUM_VALS[t.name];
+    if (!ev) return null;
+    const preview = Object.entries(ev).slice(0, 3)
+      .map(([col, vals]) => `${col}=${JSON.stringify(vals[0])}`).join(', ');
+    return `${t.name}: ${preview}`;
+  }).filter(Boolean).join('\n');
 
-## 규칙
-- Presto SQL 문법 사용 (ANSI SQL + Presto 함수)
+  const systemPrompt = `당신은 Presto SQL 전문가입니다. 아래 ERD 스키마를 바탕으로 자연어 요건을 SQL로 변환해주세요.
+
+## 출력 형식 (반드시 이 형식 준수)
+### PRESTO SQL
+\`\`\`sql
+(Presto SQL 쿼리)
+\`\`\`
+
+### SQLITE TEST
+\`\`\`sql
+(위 쿼리를 SQLite 호환으로 변환 — 아래 규칙 적용)
+\`\`\`
+
+## Presto SQL 규칙
 - 테이블 경로: ods_commerce_production.테이블명
 - 날짜 필터: date(컬럼명 AT TIME ZONE 'Asia/Seoul') BETWEEN date('시작일') AND date('종료일')
-- log_date 파티션 필터도 포함: date(date_parse(log_date, '%Y%m%d')) BETWEEN date_add('day', -1, date('시작일')) AND date_add('day', 1, date('종료일'))
-- SQL만 출력하고 설명은 주석(//)으로만
 - 컬럼 alias는 한국어로 작성
+- SQL 외 설명은 -- 주석으로만
+
+## SQLite TEST 규칙
+- 테이블명에서 ods_commerce_production. 접두어 제거
+- AT TIME ZONE, date_parse, date_add 등 Presto 전용 함수 제거 또는 SQLite 동치로 변환
+- WHERE 날짜 조건: 제거하거나 WHERE 1=1 로 대체 (샘플 데이터에 날짜 없으므로)
+- LIMIT 5 추가
+- 샘플 데이터에 실제로 존재하는 값 기준으로 WHERE 조건 단순화
 
 ## ERD 스키마
-${buildSchemaContext()}`;
+${buildSchemaContext()}
+
+## 샘플 데이터 (ENUM_VALS 기준 일부)
+${sampleSummary}`;
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -3812,7 +3987,7 @@ ${buildSchemaContext()}`;
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2048,
+        max_tokens: 3000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userQuery }]
       })
@@ -3820,7 +3995,19 @@ ${buildSchemaContext()}`;
 
     const data = await res.json();
     if (data.error) throw new Error(data.error.message);
-    output.textContent = data.content[0].text;
+    const fullText = data.content[0].text;
+
+    // Presto SQL 파싱
+    const prestoMatch = fullText.match(/###\s*PRESTO SQL[\s\S]*?```sql\s*([\s\S]*?)```/i);
+    // SQLite 파싱
+    const sqliteMatch = fullText.match(/###\s*SQLITE TEST[\s\S]*?```sql\s*([\s\S]*?)```/i);
+
+    output.textContent = prestoMatch ? prestoMatch[1].trim() : fullText;
+    _sqliteTestSQL = sqliteMatch ? sqliteMatch[1].trim() : '';
+
+    if (_sqliteTestSQL) {
+      document.getElementById('llm-run-btn').style.color = '#a6e3a1';
+    }
   } catch (e) {
     output.textContent = '오류: ' + e.message;
   } finally {
@@ -3836,6 +4023,185 @@ function copyLlmSQL() {
     const btn = document.getElementById('llm-copy-btn');
     btn.textContent = '복사됨!';
     setTimeout(() => { btn.textContent = '복사'; }, 1500);
+  });
+}
+
+/* ── SQL.js 샘플 실행 ─────────────────────────────────────────────── */
+
+let _sqliteDB = null;
+
+// SQLite 타입 매핑
+function toSqliteType(t) {
+  if (t === 'bigint') return 'INTEGER';
+  if (t === 'bool')   return 'INTEGER';
+  if (t === 'ts')     return 'TEXT';
+  return 'TEXT';
+}
+
+// ENUM_VALS 기준으로 테이블당 5개 샘플 행 생성
+function buildSampleRows(tableName, cols) {
+  const ev = ENUM_VALS[tableName] || {};
+  const rows = [];
+  for (let i = 0; i < 5; i++) {
+    const row = {};
+    cols.forEach(([name, type]) => {
+      if (name === 'id') { row[name] = i + 1; return; }
+      const vals = ev[name];
+      if (vals && vals.length) {
+        const v = vals[i % vals.length];
+        row[name] = (type === 'bigint' || type === 'bool') ? (parseInt(v) || i + 1) : v;
+      } else if (type === 'bigint') {
+        row[name] = i + 1;
+      } else if (type === 'bool') {
+        row[name] = i % 2;
+      } else {
+        row[name] = null;
+      }
+    });
+    rows.push(row);
+  }
+  return rows;
+}
+
+async function loadSqlJs() {
+  if (window.SQL) return window.SQL;
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js';
+    script.onload = async () => {
+      try {
+        const SQL = await initSqlJs({
+          locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}`
+        });
+        window.SQL = SQL;
+        resolve(SQL);
+      } catch(e) { reject(e); }
+    };
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function buildSampleDB() {
+  if (_sqliteDB) return _sqliteDB;
+  const SQL = await loadSqlJs();
+  const db = new SQL.Database();
+
+  TABLES.forEach(t => {
+    const colDefs = t.cols.map(([name, type]) =>
+      `"${name}" ${toSqliteType(type)}`
+    ).join(', ');
+    try { db.run(`CREATE TABLE IF NOT EXISTS "${t.name}" (${colDefs})`); } catch(e) {}
+
+    const rows = buildSampleRows(t.name, t.cols);
+    rows.forEach(row => {
+      const keys = t.cols.map(([n]) => `"${n}"`).join(', ');
+      const placeholders = t.cols.map(() => '?').join(', ');
+      const vals = t.cols.map(([n]) => row[n] !== undefined ? row[n] : null);
+      try { db.run(`INSERT INTO "${t.name}" (${keys}) VALUES (${placeholders})`, vals); } catch(e) {}
+    });
+  });
+
+  _sqliteDB = db;
+  return db;
+}
+
+async function runSampleSQL() {
+  const runBtn = document.getElementById('llm-run-btn');
+  if (!_sqliteTestSQL) {
+    alert('먼저 SQL을 생성해주세요.');
+    return;
+  }
+  runBtn.textContent = '실행 중...';
+  try {
+    const db = await buildSampleDB();
+    const results = db.exec(_sqliteTestSQL);
+    const resultWrap = document.getElementById('llm-result-wrap');
+    const tbl = document.getElementById('llm-result-table');
+    const cnt = document.getElementById('llm-result-count');
+
+    if (!results.length) {
+      tbl.innerHTML = '<tr><td style="color:#6c7086;padding:12px">결과 없음 (샘플 데이터 조건 불일치)</td></tr>';
+      cnt.textContent = '';
+    } else {
+      const { columns, values } = results[0];
+      cnt.textContent = `${values.length}행`;
+      const thead = `<tr>${columns.map(c => `<th>${c}</th>`).join('')}</tr>`;
+      const tbody = values.map(row =>
+        `<tr>${row.map(v => `<td>${v === null ? '<i style="color:#45475a">NULL</i>' : v}</td>`).join('')}</tr>`
+      ).join('');
+      tbl.innerHTML = thead + tbody;
+    }
+    resultWrap.classList.add('visible');
+  } catch(e) {
+    const tbl = document.getElementById('llm-result-table');
+    tbl.innerHTML = `<tr><td style="color:#f38ba8;padding:12px">실행 오류: ${e.message}</td></tr>`;
+    document.getElementById('llm-result-wrap').classList.add('visible');
+  } finally {
+    runBtn.textContent = '▶ 샘플 실행';
+  }
+}
+
+/* ── 피드백 패널 ──────────────────────────────────────────────────── */
+
+(function initFeedbackPanel() {
+  const tableSel = document.getElementById('fb-table-sel');
+  const colSel   = document.getElementById('fb-col-sel');
+
+  // 테이블 목록 채우기
+  TABLES.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.name;
+    opt.textContent = `${t.name} (${t.domain})`;
+    tableSel.appendChild(opt);
+  });
+
+  // 테이블 선택 시 컬럼 목록 갱신
+  tableSel.addEventListener('change', () => {
+    colSel.innerHTML = '<option value="">-- 선택 안함 --</option>';
+    const tbl = TABLES.find(t => t.name === tableSel.value);
+    if (!tbl) return;
+    tbl.cols.forEach(([name, type]) => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = `${name} (${type})`;
+      colSel.appendChild(opt);
+    });
+  });
+})();
+
+function copyFeedback() {
+  const category = document.getElementById('fb-category').value;
+  const table    = document.getElementById('fb-table-sel').value;
+  const col      = document.getElementById('fb-col-sel').value;
+  const text     = document.getElementById('fb-text').value.trim();
+
+  if (!text) { alert('내용을 입력해주세요.'); return; }
+
+  const lines = [
+    `[ERD 피드백] ${category}`,
+    table ? `테이블: ${table}${col ? ` > ${col}` : ''}` : '',
+    `내용: ${text}`,
+    '',
+    '→ erd_llm.html에 반영해줘'
+  ].filter(l => l !== null && !(l === '' && lines && lines[lines.length-1] === '')).join('\n');
+
+  const formatted = [
+    `[ERD 피드백] ${category}`,
+    table ? `테이블: ${table}${col ? ` > ${col}` : ''}` : null,
+    `내용: ${text}`,
+    '',
+    '→ erd_llm.html에 반영해줘'
+  ].filter(l => l !== null).join('\n');
+
+  const preview = document.getElementById('fb-preview');
+  preview.textContent = formatted;
+  preview.classList.add('visible');
+
+  navigator.clipboard.writeText(formatted).then(() => {
+    const status = document.getElementById('fb-status');
+    status.textContent = '✓ 클립보드에 복사됨! Claude Code 채팅창에 붙여넣기 하세요.';
+    setTimeout(() => { status.textContent = ''; }, 4000);
   });
 }
 
