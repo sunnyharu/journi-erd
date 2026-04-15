@@ -424,13 +424,16 @@ WITH
 
 su AS (
     -- ref_id + sku_id 기준 집계: 동일 거래가 멀티창고로 나뉜 경우 하나로 합산
+    -- before/after는 창고별 합산 → 전체 재고 기준 변동전/후 수량
     SELECT
         DATE(updated_at AT TIME ZONE 'Asia/Seoul') AS dt,
         sku_id,
         type,
         ref_id,
         ref_type,
-        SUM(delta) AS delta
+        SUM(delta)           AS delta,
+        SUM(before_quantity) AS before_quantity,
+        SUM(after_quantity)  AS after_quantity
     FROM ods_commerce_production.stock_usage_ro
     WHERE DATE(updated_at AT TIME ZONE 'Asia/Seoul')
           BETWEEN date '{{조회 기간.start}}' AND date '{{조회 기간.end}}'
@@ -454,14 +457,18 @@ sku_info AS (
     WHERE s.deleted_at IS NULL AND sg.deleted_at IS NULL
 ),
 
--- stock_id → warehouse_id 매핑 제거 (ref_id 기준 집계로 stock_id 단일화 불가)
--- 관리창고는 추후 warehouse 매핑 테이블 확보 시 추가
+partner_info AS (
+    SELECT id AS biz_partner_id, name AS partner_nm
+    FROM ods_commerce_production.partner_ro
+    WHERE deleted_at IS NULL
+)
 
 SELECT
     su.dt                                                                 AS "날짜",
     si.barcode                                                            AS "SKU(KE발급바코드)",
     si.sku_nm                                                             AS "품명",
-    si.biz_partner_id                                                     AS "거래처ID",
+    si.biz_partner_id                                                     AS "파트너ID",
+    pi.partner_nm                                                         AS "파트너명",
 
     -- 구분(유형)
     CASE
@@ -478,7 +485,7 @@ SELECT
         WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta <  0           THEN '재고조정(마이너스)'
     END                                                                   AS "상세구분1",
 
-    -- 상세구분2 (이동/반품/불량/CS 자동구분 불가 → 가용 기본값, 조정은 별도 표기)
+    -- 상세구분2 (이동/반품/불량/CS 자동구분 불가 → 가용 기본값)
     CASE
         WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta >= 0           THEN '재고조정(플러스)'
         WHEN su.type = 'ADJUSTMENT_COMPLETED' AND su.delta <  0           THEN '재고조정(마이너스)'
@@ -487,10 +494,10 @@ SELECT
 
     su.delta                                                              AS "수량",
 
-    -- 관리창고: ref_id 기준 집계로 stock_id 제거됨 → 매핑 테이블 확보 시 추가
+    -- 관리창고: warehouse 매핑 테이블 확보 시 추가 예정
     CAST(NULL AS BIGINT)                                                  AS "관리창고(warehouse_id)",
 
-    -- 이동 체번: TRANSFER ref_type 없으므로 현재 자동생성 불가 (운영 수동 입력)
+    -- 이동 체번: TRANSFER ref_type 없으므로 자동생성 불가 (운영 수동 입력)
     CAST(NULL AS VARCHAR)                                                 AS "이동입출고체번",
 
     -- 단가/금액: sku_ro.price_amount 기준 (varchar → double 변환)
@@ -499,15 +506,16 @@ SELECT
     ROUND(TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta) * 0.1)    AS "VAT(부가세)",
     ROUND(TRY_CAST(si.price_amount AS DOUBLE) * ABS(su.delta) * 1.1)    AS "공급대가",
 
-    -- 변동전/후 수량: ref_id 기준 집계로 stock_id 제거됨 → NULL (원본 필요시 stock_id 복원 필요)
-    CAST(NULL AS BIGINT)                                                  AS "변동전수량",
-    CAST(NULL AS BIGINT)                                                  AS "변동후수량",
+    -- 변동전/후: 멀티창고 합산 기준 (창고별 합산으로 전체 재고 기준 표시)
+    su.before_quantity                                                    AS "변동전수량",
+    su.after_quantity                                                     AS "변동후수량",
     su.type                                                               AS "이벤트타입",
     su.ref_type                                                           AS "참조타입",
     su.ref_id                                                             AS "참조ID"
 
 FROM su
-LEFT JOIN sku_info si ON su.sku_id = si.sku_id
+LEFT JOIN sku_info    si ON su.sku_id        = si.sku_id
+LEFT JOIN partner_info pi ON si.biz_partner_id = pi.biz_partner_id
 WHERE (
     '{{거래처ID}}' = ''
     OR CAST(si.biz_partner_id AS VARCHAR) = '{{거래처ID}}'
