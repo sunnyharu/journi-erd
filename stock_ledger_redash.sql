@@ -370,13 +370,12 @@ su AS (
 ),
 
 -- 완제품(BOM 부모 SKU) 기준 조회기간.end 이전 누적 판매수량
--- status: CONFIRMED(결제확정) + COMPLETED(최종완료) 모두 포함
--- 날짜 기준: confirmed_at (주문확정 일시) 사용
+-- status: CONFIRMED(구매확정) + COMPLETED(구매완료) 모두 포함
+-- 날짜 기준: created_at (주문 생성 일시) 사용
 parent_sales AS (
     SELECT sku_id, SUM(quantity) AS cumul_sales
     FROM ods_commerce_production.order_line_ro
-    WHERE confirmed_at IS NOT NULL
-      AND DATE(confirmed_at AT TIME ZONE 'Asia/Seoul') <= date '{{조회 기간.end}}'
+    WHERE DATE(created_at AT TIME ZONE 'Asia/Seoul') <= date '{{조회 기간.end}}'
       AND status IN ('CONFIRMED', 'COMPLETED')
       AND deleted_at IS NULL
       AND sku_id IN (SELECT bom_parent_id FROM parent_ids)
