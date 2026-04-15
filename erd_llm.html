@@ -638,9 +638,10 @@ const DOMAIN_COLORS = {
   payment: '#cba6f7',
   coupon:  '#f5c2e7',
   partner: '#a6adc8',
+  mart:    '#eba0ac',
 };
 
-const DOMAIN_ORDER = ['user','product','sku','order','claim','delivery','payment','coupon','partner'];
+const DOMAIN_ORDER = ['user','product','sku','order','claim','delivery','payment','coupon','partner','mart'];
 
 // Column definition: [name, type, flags]
 // flags: 'PK', 'FK:table.col', 'audit', or ''
@@ -1689,7 +1690,69 @@ const TABLES = [
     ['currency','varchar',''],
     ['name','varchar',''],
     ['language','varchar',''],
-  
+
+  ]},
+
+  // ── MART ────────────────────────────────────────────────────────
+  { name: 'mart_daily_order', domain: 'mart', cols: [
+    ['completed_dt','varchar',''],
+    ['claim_dt','varchar',''],
+    ['cancel_yn','bigint',''],
+    ['user_id','bigint',''],
+    ['member_key','varchar',''],
+    ['order_id','bigint',''],
+    ['order_line_id','bigint',''],
+    ['order_bundle_id','bigint',''],
+    ['order_product_id','bigint',''],
+    ['product_item_id','bigint',''],
+    ['sku_id','bigint',''],
+    ['product_id','bigint',''],
+    ['product_name','varchar',''],
+    ['option_name','varchar',''],
+    ['product_item_type','varchar',''],
+    ['krw_amount','double',''],
+    ['quantity','bigint',''],
+    ['line_krw_amount','double',''],
+    ['krw_delivery_fee','double',''],
+    ['unit_price','double',''],
+    ['refund_krw_amount','double',''],
+    ['total_claim_delivery_fee','double',''],
+    ['refund_amount','double',''],
+    ['cancel_quantity','bigint',''],
+    ['currency','varchar',''],
+    ['amount','double',''],
+    ['line_amount','double',''],
+    ['delivery_fee','double',''],
+    ['exchange_rate','varchar',''],
+    ['project_id','bigint',''],
+    ['project_name','varchar',''],
+    ['bm_type','varchar',''],
+    ['bm_type_nm','varchar',''],
+    ['receiver_country','varchar',''],
+    ['receiver_country_nm','varchar',''],
+    ['receiving_type','varchar',''],
+    ['product_type','varchar',''],
+    ['partner_id','bigint',''],
+    ['partner_nm','varchar',''],
+    ['artist_id','bigint',''],
+    ['artist_name','varchar',''],
+    ['mall_id','bigint',''],
+    ['mall_name','varchar',''],
+    ['join_country','varchar',''],
+    ['join_country_nm','varchar',''],
+    ['coupon_policy_id','bigint',''],
+    ['coupon_discount_type','varchar',''],
+    ['coupon_scope_type','varchar',''],
+    ['real_discount_amount','double',''],
+    ['coupon_discount_amount','double',''],
+    ['coupon_discount_rate','double',''],
+    ['max_discount_amount','double',''],
+    ['min_applicable_price','double',''],
+    ['coupon_name','varchar',''],
+    ['amt_rk','bigint',''],
+    ['delivery_rk','bigint',''],
+    ['net_amt_rk','bigint',''],
+    ['net_delivery_rk','bigint',''],
   ]},
 ];
 
@@ -2286,6 +2349,63 @@ const COL_DESCS = {
     currency:'통화 코드',
     language:'Enum: EN, JA, ZH_HANS'
   },
+  mart_daily_order: {
+    completed_dt:'결제완료일 (YYYY-MM-DD 문자열)',
+    claim_dt:'클레임 발생일',
+    cancel_yn:'취소여부 (0:정상, 1:취소)',
+    user_id:'사용자 ID',
+    member_key:'멤버 UUID',
+    order_id:'주문 ID',
+    order_line_id:'주문상품 ID (주문 내 상품 단위)',
+    order_bundle_id:'주문묶음 ID (배송 단위)',
+    order_product_id:'주문상품묶음 ID',
+    product_item_id:'상품옵션 ID',
+    sku_id:'SKU ID',
+    product_id:'상품 ID',
+    product_name:'상품명',
+    option_name:'옵션명',
+    product_item_type:'상품유형 (SINGLE/BUNDLE)',
+    krw_amount:'결제금액 원화 (주문 전체 기준)',
+    quantity:'구매수량',
+    line_krw_amount:'상품금액 원화 (상품 단위)',
+    krw_delivery_fee:'배송비 원화',
+    unit_price:'단가 (line_krw_amount / quantity)',
+    refund_krw_amount:'환불금액 원화',
+    total_claim_delivery_fee:'클레임 배송비',
+    cancel_quantity:'취소수량',
+    currency:'결제통화 (KRW/USD/JPY)',
+    amount:'결제금액 원화통화',
+    line_amount:'상품금액 결제통화',
+    delivery_fee:'배송비 결제통화',
+    exchange_rate:'환율',
+    project_id:'프로젝트 ID',
+    project_name:'프로젝트명',
+    bm_type:'BM유형 코드 (CO:위탁, LI:라이선스, DP:사입, CM:커뮤니티 등)',
+    bm_type_nm:'BM유형 한글명',
+    receiver_country:'수령국가 코드',
+    receiver_country_nm:'수령국가명',
+    receiving_type:'수령유형 (DELIVERY/PICKUP)',
+    product_type:'상품타입 (GENERAL)',
+    partner_id:'파트너 ID',
+    partner_nm:'파트너명',
+    artist_id:'아티스트 ID',
+    artist_name:'아티스트명',
+    mall_id:'몰 ID',
+    mall_name:'몰명',
+    join_country:'가입국가 코드',
+    join_country_nm:'가입국가명',
+    coupon_policy_id:'쿠폰정책 ID',
+    coupon_discount_type:'쿠폰할인유형 (AMT:정액/RATE:정률)',
+    coupon_scope_type:'쿠폰범위 (PRODUCT/CHECKOUT)',
+    real_discount_amount:'실제 쿠폰할인액 원화',
+    coupon_discount_amount:'쿠폰할인금액',
+    coupon_discount_rate:'쿠폰할인율',
+    coupon_name:'쿠폰명',
+    amt_rk:'주문당 금액 중복제거 순위 (1이면 주문 대표행)',
+    delivery_rk:'묶음당 배송비 중복제거 순위 (1이면 배송비 대표행)',
+    net_amt_rk:'순기준 주문당 중복제거 순위',
+    net_delivery_rk:'순기준 묶음당 배송비 중복제거 순위',
+  },
   sku_group_ro: {
     id:'식별자 (PK)',
     created_at:'생성 일시',
@@ -2637,6 +2757,17 @@ const ENUM_VALS = {
   zone_country_mapping_ro: {
     country:["BE", "BR", "CC", "CN", "EG", "GM", "RS", "TG", "TL", "TV"],
     zone_code:["H", "I", "J", "K", "M", "Z"]
+  },
+  mart_daily_order: {
+    cancel_yn:["0", "1"],
+    product_item_type:["SINGLE", "BUNDLE"],
+    bm_type:["CO", "LI", "DP", "CM", "BR", "AG", "MD", "OM", "DB"],
+    bm_type_nm:["위탁", "라이선스", "사입", "커뮤니티", "BR", "운영 위수탁", "제조납품", "제작외주", "유통"],
+    receiving_type:["DELIVERY", "PICKUP"],
+    product_type:["GENERAL"],
+    currency:["KRW", "USD", "JPY"],
+    coupon_discount_type:["AMT", "RATE"],
+    coupon_scope_type:["PRODUCT", "CHECKOUT"],
   },
 };
 
@@ -3527,12 +3658,25 @@ async function generateSQL() {
 \`\`\`
 
 ## Presto SQL 규칙
-- 테이블 경로: ods_commerce_production.테이블명
+- 테이블 경로: ods_commerce_production.테이블명 (mart 제외)
+- mart 테이블 경로: journi_y222.mart_daily_order (ods_commerce_production 접두어 사용 안 함)
 - 날짜 필터: date(컬럼명 AT TIME ZONE 'Asia/Seoul') BETWEEN date('시작일') AND date('종료일')
 - 파티션 필터: date(date_parse(log_date, '%Y%m%d')) BETWEEN date_add('day', -1, date('시작일')) AND date_add('day', 1, date('종료일'))
 - **[필수] 컬럼 alias는 반드시 영문 snake_case만 사용. 한글 alias 절대 금지.** 한글명은 같은 줄 끝 주석으로만 표기 (예: SUM(delta) AS total_qty -- 총수량, date(...) AS dt -- 날짜)
 - SQL 외 설명은 -- 주석으로만
+- **[거래/주문 관련 쿼리 우선 규칙]** 주문, 결제, 거래액, 취소, 고객 수 등 거래 관련 분석은 raw 테이블 직접 조회 대신 반드시 journi_y222.mart_daily_order 마트를 기본으로 사용
 - 아래 베이스 쿼리의 CTE 구조, JOIN 패턴, 날짜 필터 방식을 최대한 참고하여 생성
+
+## mart_daily_order 집계 패턴 (order_summary.sql 기준)
+- 날짜 필터: WHERE date_format(date_parse(completed_dt, '%Y-%m-%d'), '%Y-%m') = '{{조회월}}'
+- 결제금액(KRW): SUM(IF(amt_rk = 1, COALESCE(krw_amount, 0), 0)) -- 주문 중복 제거 필수
+- 배송비: SUM(IF(delivery_rk = 1, krw_delivery_fee, 0)) -- 묶음 중복 제거 필수
+- 쿠폰할인: SUM(COALESCE(real_discount_amount, 0))
+- 순기준(취소 제외): cancel_yn = 0 조건, net_amt_rk / net_delivery_rk 사용
+- 순결제거래액: SUM(IF(net_amt_rk=1 AND cancel_yn=0, COALESCE(krw_amount,0) - COALESCE(ROUND(refund_krw_amount,0),0), 0))
+- 주문수: COUNT(DISTINCT order_id), 고객수: COUNT(DISTINCT user_id), 상품수: COUNT(DISTINCT order_line_id)
+- 인당주문수: ROUND(CAST(ord_cnt AS DOUBLE) / NULLIF(CAST(user_cnt AS DOUBLE), 0), 1)
+- 주문당거래액: CAST(ROUND(pay_amt / NULLIF(CAST(ord_cnt AS DOUBLE), 0)) AS INTEGER)
 
 ## 베이스 쿼리 참고 (order.sql)
 \`\`\`sql
