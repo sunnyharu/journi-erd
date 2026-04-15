@@ -3527,7 +3527,7 @@ async function generateSQL() {
 ## Presto SQL 규칙
 - 테이블 경로: ods_commerce_production.테이블명
 - 날짜 필터: date(컬럼명 AT TIME ZONE 'Asia/Seoul') BETWEEN date('시작일') AND date('종료일')
-- 컬럼 alias는 한국어로 작성
+- 컬럼 alias는 영문(snake_case)으로 작성하고, 같은 줄 끝에 -- 한글명 주석 추가 (예: SUM(delta) AS total_qty -- 총수량)
 - SQL 외 설명은 -- 주석으로만
 
 ## SQLite TEST 규칙
