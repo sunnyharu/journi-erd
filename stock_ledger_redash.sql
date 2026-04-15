@@ -370,7 +370,7 @@ parent_sales AS (
 
 -- SKU 마스터 (완제품/구성요소 이름 조회용)
 sku_info AS (
-    SELECT s.id AS sku_id, s.name AS sku_nm, s.sku_code, sg.biz_partner_id
+    SELECT s.id AS sku_id, s.name AS sku_nm, s.sku_code, s.barcode, sg.biz_partner_id
     FROM ods_commerce_production.sku_ro s
     JOIN ods_commerce_production.sku_group_ro sg ON s.sku_group_id = sg.id
     WHERE s.deleted_at IS NULL AND sg.deleted_at IS NULL
@@ -378,10 +378,10 @@ sku_info AS (
 
 SELECT
     pi_parent.biz_partner_id                              AS "거래처ID",
-    b.bom_parent_id                                       AS "BOM완제품_SKU_ID",
+    pi_parent.barcode                                     AS "BOM완제품_바코드",
     pi_parent.sku_nm                                      AS "BOM완제품명",
     pi_parent.sku_code                                    AS "BOM완제품코드",
-    b.component_id                                        AS "구성요소_SKU_ID",
+    pi_comp.barcode                                       AS "구성요소_바코드",
     pi_comp.sku_nm                                        AS "구성요소명",
     pi_comp.sku_code                                      AS "구성요소코드",
     b.unit_qty                                            AS "단위구성수량",
