@@ -3672,11 +3672,17 @@ async function generateSQL() {
 - 결제금액(KRW): SUM(IF(amt_rk = 1, COALESCE(krw_amount, 0), 0)) -- 주문 중복 제거 필수
 - 배송비: SUM(IF(delivery_rk = 1, krw_delivery_fee, 0)) -- 묶음 중복 제거 필수
 - 쿠폰할인: SUM(COALESCE(real_discount_amount, 0))
-- 순기준(취소 제외): cancel_yn = 0 조건, net_amt_rk / net_delivery_rk 사용
-- 순결제거래액: SUM(IF(net_amt_rk=1 AND cancel_yn=0, COALESCE(krw_amount,0) - COALESCE(ROUND(refund_krw_amount,0),0), 0))
 - 주문수: COUNT(DISTINCT order_id), 고객수: COUNT(DISTINCT user_id), 상품수: COUNT(DISTINCT order_line_id)
 - 인당주문수: ROUND(CAST(ord_cnt AS DOUBLE) / NULLIF(CAST(user_cnt AS DOUBLE), 0), 1)
 - 주문당거래액: CAST(ROUND(pay_amt / NULLIF(CAST(ord_cnt AS DOUBLE), 0)) AS INTEGER)
+
+## [중요] 취소 제외 처리 규칙
+- **사용자가 명시적으로 "취소 제외", "순기준", "net" 등을 언급한 경우에만** cancel_yn = 0 조건 및 net_amt_rk / net_delivery_rk 적용
+- 언급이 없으면 취소 포함 전체 기준(총 기준)으로 쿼리 생성
+- 취소 제외 요청 시 집계 패턴:
+  - 순결제거래액: SUM(IF(net_amt_rk=1 AND cancel_yn=0, COALESCE(krw_amount,0) - COALESCE(ROUND(refund_krw_amount,0),0), 0))
+  - 순배송비: SUM(IF(net_delivery_rk=1 AND cancel_yn=0, COALESCE(krw_delivery_fee,0) + COALESCE(total_claim_delivery_fee,0), 0))
+  - 순주문수: COUNT(DISTINCT IF(cancel_yn=0, order_id, NULL))
 
 ## 베이스 쿼리 참고 (order.sql)
 \`\`\`sql
