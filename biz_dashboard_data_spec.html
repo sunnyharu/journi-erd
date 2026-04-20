@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>비즈파트너센터 대시보드 — 데이터 구조 명세</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', Arial, sans-serif;
+    background: #f8f9fa;
+    color: #1a1a2e;
+    font-size: 13px;
+    padding: 32px;
+  }
+
+  /* ── Title ── */
+  .page-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 4px;
+  }
+  .page-sub {
+    font-size: 13px;
+    color: #6b7280;
+    margin-bottom: 32px;
+  }
+
+  /* ── Section headers ── */
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin-bottom: 12px;
+  }
+
+  /* ── Data flow diagram ── */
+  .flow-wrap {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    margin-bottom: 36px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .flow-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 170px;
+  }
+  .flow-col-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin-bottom: 4px;
+    text-align: center;
+  }
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    padding-top: 36px;
+    color: #9ca3af;
+    font-size: 20px;
+  }
+  .flow-arrow.double { font-size: 16px; }
+
+  /* ── Table boxes ── */
+  .tbl-box {
+    background: #fff;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 8px 12px;
+    width: 100%;
+    cursor: default;
+  }
+  .tbl-box .tbl-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 4px;
+  }
+  .tbl-box .tbl-schema {
+    font-size: 10px;
+    color: #9ca3af;
+    font-family: monospace;
+    margin-bottom: 4px;
+  }
+  .tbl-box .tbl-cols {
+    font-size: 11px;
+    color: #6b7280;
+    line-height: 1.8;
+  }
+  .tbl-box .tbl-cols .col-key { color: #f59e0b; font-weight: 600; }
+  .tbl-box .tbl-cols .col-dim { color: #3b82f6; }
+  .tbl-box .tbl-cols .col-met { color: #10b981; }
+
+  /* box variants */
+  .tbl-box.raw   { border-color: #d1d5db; }
+  .tbl-box.mart  { border-color: #6366f1; border-width: 2px; background: #fafafe; }
+  .tbl-box.dim   { border-color: #0ea5e9; }
+  .tbl-box.api   { border-color: #10b981; background: #f0fdf4; }
+  .tbl-box.rt    { border-color: #f59e0b; background: #fffbeb; }
+
+  .badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .badge-mart  { background: #ede9fe; color: #7c3aed; }
+  .badge-rt    { background: #fef3c7; color: #b45309; }
+  .badge-dim   { background: #e0f2fe; color: #0369a1; }
+
+  /* ── Mart highlight box ── */
+  .mart-highlight {
+    background: #ede9fe;
+    border: 2px solid #7c3aed;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 36px;
+  }
+  .mart-highlight h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #5b21b6;
+    margin-bottom: 8px;
+  }
+  .mart-highlight p { font-size: 12px; color: #6d28d9; margin-bottom: 12px; }
+  .col-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 6px;
+  }
+  .col-item {
+    background: #fff;
+    border-radius: 6px;
+    padding: 6px 10px;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .col-item .col-name {
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: #4c1d95;
+    min-width: 160px;
+  }
+  .col-item .col-desc {
+    font-size: 11px;
+    color: #6b7280;
+  }
+  .col-tag {
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 3px;
+    padding: 1px 4px;
+    white-space: nowrap;
+  }
+  .tag-dim  { background: #dbeafe; color: #1d4ed8; }
+  .tag-met  { background: #d1fae5; color: #065f46; }
+  .tag-filter { background: #fce7f3; color: #9d174d; }
+  .tag-agg  { background: #fef3c7; color: #92400e; }
+
+  /* ── Tab cards ── */
+  .tabs-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 36px;
+  }
+  @media (max-width: 900px) {
+    .tabs-grid { grid-template-columns: 1fr; }
+  }
+  .tab-card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1.5px solid #e5e7eb;
+    overflow: hidden;
+  }
+  .tab-card-header {
+    padding: 12px 16px;
+    font-weight: 700;
+    font-size: 14px;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tab-card-body { padding: 14px 16px; }
+
+  .spec-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: flex-start;
+  }
+  .spec-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: #9ca3af;
+    min-width: 72px;
+    padding-top: 2px;
+  }
+  .spec-val {
+    font-size: 12px;
+    color: #374151;
+    line-height: 1.7;
+    flex: 1;
+  }
+  .spec-val code {
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 11px;
+    background: #f3f4f6;
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: #4f46e5;
+  }
+  .spec-val .kw { color: #7c3aed; font-weight: 600; }
+  .spec-val .tbl { color: #0369a1; font-weight: 600; }
+  .chip {
+    display: inline-block;
+    background: #f3f4f6;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    color: #374151;
+    margin: 2px 2px 2px 0;
+  }
+  .chip.filter { background: #fce7f3; color: #9d174d; }
+  .chip.metric { background: #d1fae5; color: #065f46; }
+  .chip.group  { background: #dbeafe; color: #1d4ed8; }
+
+  /* tab color headers */
+  .tab-전체     { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+  .tab-아티스트 { background: #fdf2f8; border-color: #a855f7; color: #7e22ce; }
+  .tab-상품     { background: #fff7ed; border-color: #f97316; color: #c2410c; }
+  .tab-국가     { background: #f0fdf4; border-color: #22c55e; color: #15803d; }
+
+  /* ── SQL block ── */
+  .sql-wrap {
+    background: #1e1e2e;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 36px;
+    overflow-x: auto;
+  }
+  .sql-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #6c7086;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  pre.sql {
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #cdd6f4;
+    white-space: pre;
+  }
+  pre.sql .kw  { color: #89b4fa; }
+  pre.sql .fn  { color: #a6e3a1; }
+  pre.sql .str { color: #a6e3a1; }
+  pre.sql .num { color: #fab387; }
+  pre.sql .cmt { color: #6c7086; font-style: italic; }
+  pre.sql .tbl { color: #f9e2af; }
+
+  /* ── Join path diagram ── */
+  .join-diagram {
+    background: #fff;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 36px;
+    overflow-x: auto;
+  }
+  .join-diagram h3 { font-size: 13px; font-weight: 700; margin-bottom: 16px; color: #374151; }
+  .join-path {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .jp-tbl {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #374151;
+    font-family: monospace;
+    white-space: nowrap;
+  }
+  .jp-tbl.mart { background: #ede9fe; border-color: #8b5cf6; color: #5b21b6; }
+  .jp-tbl.dim  { background: #dbeafe; border-color: #3b82f6; color: #1e40af; }
+  .jp-arrow {
+    color: #9ca3af;
+    font-size: 14px;
+  }
+  .jp-key {
+    font-size: 10px;
+    color: #6b7280;
+    font-family: monospace;
+    white-space: nowrap;
+  }
+  .jp-label {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-left: 6px;
+  }
+
+  /* ── Notes ── */
+  .note-box {
+    background: #fffbeb;
+    border: 1.5px solid #fbbf24;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12px;
+    color: #78350f;
+    line-height: 1.7;
+    margin-bottom: 36px;
+  }
+  .note-box strong { color: #92400e; }
+
+  hr.divider {
+    border: none;
+    border-top: 1.5px solid #e5e7eb;
+    margin: 28px 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">비즈파트너센터 대시보드 — 데이터 구조 명세</div>
+<div class="page-sub">개발자용 | 데이터 흐름 · 테이블 관계 · 탭별 API 파라미터 정의 · 2026-04-20</div>
+
+<!-- ═══════════════════════════════════════ 1. DATA FLOW ═══════════════════════════════════════ -->
+<div class="section-label">1. 전체 데이터 흐름</div>
+
+<div class="flow-wrap">
+
+  <!-- RAW -->
+  <div class="flow-col">
+    <div class="flow-col-label">Raw Tables<br>(ods_commerce_production)</div>
+
+    <div class="tbl-box raw">
+      <div class="tbl-name">order_ro</div>
+      <div class="tbl-cols">
+        <span class="col-key">id</span> · user_id · status<br>
+        created_at · completed_at
+      </div>
+    </div>
+
+    <div class="tbl-box raw">
+      <div class="tbl-name">order_line_ro</div>
+      <div class="tbl-cols">
+        <span class="col-key">id</span> · order_id · sku_id<br>
+        quantity · krw_amount · status
+      </div>
+    </div>
+
+    <div class="tbl-box raw">
+      <div class="tbl-name">payment_ro</div>
+      <div class="tbl-cols">
+        <span class="col-key">id</span> · order_id<br>
+        krw_amount · status
+      </div>
+    </div>
+
+    <div class="tbl-box raw">
+      <div class="tbl-name">order_bundle_ro</div>
+      <div class="tbl-cols">
+        <span class="col-key">id</span> · order_id<br>
+        krw_delivery_fee
+      </div>
+    </div>
+
+    <div class="tbl-box raw" style="border-color:#fbbf24">
+      <div class="tbl-name">order_ro (당일 실시간) <span class="badge badge-rt">RT</span></div>
+      <div class="tbl-cols">
+        DATE(created_at) = TODAY<br>
+        실시간 집계 전용
+      </div>
+    </div>
+  </div>
+
+  <!-- arrow -->
+  <div class="flow-arrow">
+    <div style="text-align:center;">
+      <div style="font-size:22px;">→</div>
+      <div style="font-size:10px;color:#9ca3af;margin-top:4px;">ETL<br>(일배치)</div>
+    </div>
+  </div>
+
+  <!-- MART -->
+  <div class="flow-col" style="min-width:200px;">
+    <div class="flow-col-label">Mart<br>(journi_y222)</div>
+
+    <div class="tbl-box mart">
+      <div class="tbl-name">mart_daily_order <span class="badge badge-mart">MART</span></div>
+      <div class="tbl-schema">journi_y222.mart_daily_order</div>
+      <div class="tbl-cols">
+        <span class="col-key">completed_dt</span> · order_id · order_line_id<br>
+        <span class="col-dim">partner_id · artist_id · project_id</span><br>
+        <span class="col-dim">product_id · sku_id</span><br>
+        <span class="col-dim">join_country · receiver_country</span><br>
+        <span class="col-met">krw_amount · line_krw_amount</span><br>
+        <span class="col-met">krw_delivery_fee · real_discount_amount</span><br>
+        amt_rk · delivery_rk · cancel_yn
+      </div>
+    </div>
+  </div>
+
+  <!-- arrow -->
+  <div class="flow-arrow">→</div>
+
+  <!-- DIM -->
+  <div class="flow-col">
+    <div class="flow-col-label">Dimension<br>(필터 드롭다운 소스)</div>
+
+    <div class="tbl-box dim">
+      <div class="tbl-name">artist_ro <span class="badge badge-dim">DIM</span></div>
+      <div class="tbl-cols">
+        <span class="col-key">_id</span> · artistname · bizpartnerid
+      </div>
+    </div>
+
+    <div class="tbl-box dim">
+      <div class="tbl-name">contract_project_ro <span class="badge badge-dim">DIM</span></div>
+      <div class="tbl-cols">
+        <span class="col-key">_id</span> · title · artist_id · biz_partner_id
+      </div>
+    </div>
+
+    <div class="tbl-box dim">
+      <div class="tbl-name">sku_group_ro <span class="badge badge-dim">DIM</span></div>
+      <div class="tbl-cols">
+        <span class="col-key">id</span> · name · biz_partner_id
+      </div>
+    </div>
+  </div>
+
+  <!-- arrow -->
+  <div class="flow-arrow">→</div>
+
+  <!-- API -->
+  <div class="flow-col">
+    <div class="flow-col-label">API / 쿼리 레이어</div>
+
+    <div class="tbl-box api">
+      <div class="tbl-name">전체탭 API</div>
+      <div class="tbl-cols">KPI 누적 · 7일 추이<br>당일 실시간(RT)</div>
+    </div>
+
+    <div class="tbl-box api">
+      <div class="tbl-name">아티스트탭 API</div>
+      <div class="tbl-cols">artist_id 필터 · 7일 추이<br>기간 텍스트 테이블</div>
+    </div>
+
+    <div class="tbl-box api">
+      <div class="tbl-name">상품탭 API</div>
+      <div class="tbl-cols">project_id × artist_id × product_id<br>기간 텍스트 테이블</div>
+    </div>
+
+    <div class="tbl-box api">
+      <div class="tbl-name">국가탭 API</div>
+      <div class="tbl-cols">join/receiver_country<br>트리맵 · 엑셀 다운로드</div>
+    </div>
+  </div>
+
+</div><!-- /flow-wrap -->
+
+
+<!-- ═══════════════════════════════════════ 2. MART COLUMNS ═══════════════════════════════════════ -->
+<div class="section-label">2. 핵심 테이블 — mart_daily_order 주요 컬럼</div>
+
+<div class="mart-highlight">
+  <h3>journi_y222.mart_daily_order</h3>
+  <p>모든 탭 집계의 메인 소스. 일별 파티션, 파트너/아티스트/프로젝트/국가 차원 포함.</p>
+  <div class="col-grid">
+
+    <div class="col-item">
+      <div class="col-name">partner_id</div>
+      <div><span class="col-tag tag-filter">필터</span></div>
+      <div class="col-desc">파트너 식별자 (biz_partner_id)</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">completed_dt</div>
+      <div><span class="col-tag tag-dim">차원</span></div>
+      <div class="col-desc">결제완료일 (YYYY-MM-DD)</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">artist_id / artist_name</div>
+      <div><span class="col-tag tag-filter">필터</span></div>
+      <div class="col-desc">아티스트 탭 필터</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">project_id / project_name</div>
+      <div><span class="col-tag tag-filter">필터</span></div>
+      <div class="col-desc">상품(프로젝트) 탭 필터</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">product_id / product_name</div>
+      <div><span class="col-tag tag-filter">필터</span></div>
+      <div class="col-desc">상품 단위 드릴다운</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">sku_id</div>
+      <div><span class="col-tag tag-dim">차원</span></div>
+      <div class="col-desc">SKU 식별자</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">join_country / join_country_nm</div>
+      <div><span class="col-tag tag-filter">필터</span></div>
+      <div class="col-desc">가입국가 (국가탭 필터)</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">receiver_country / receiver_country_nm</div>
+      <div><span class="col-tag tag-filter">필터</span></div>
+      <div class="col-desc">배송국가 (국가탭 필터)</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">krw_amount</div>
+      <div><span class="col-tag tag-met">지표</span></div>
+      <div class="col-desc">주문 결제총액 (KRW)</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">line_krw_amount</div>
+      <div><span class="col-tag tag-met">지표</span></div>
+      <div class="col-desc">상품 라인별 금액</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">krw_delivery_fee</div>
+      <div><span class="col-tag tag-met">지표</span></div>
+      <div class="col-desc">배송비 (KRW)</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">real_discount_amount</div>
+      <div><span class="col-tag tag-met">지표</span></div>
+      <div class="col-desc">쿠폰 할인액</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">quantity / cancel_quantity</div>
+      <div><span class="col-tag tag-met">지표</span></div>
+      <div class="col-desc">구매수량 / 취소수량</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">cancel_yn</div>
+      <div><span class="col-tag tag-agg">집계조건</span></div>
+      <div class="col-desc">0: 정상 / 1: 취소 (명시적 요청 시에만 필터)</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">amt_rk</div>
+      <div><span class="col-tag tag-agg">중복제거</span></div>
+      <div class="col-desc">주문 대표행 (1=대표) → krw_amount 중복 방지</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">delivery_rk</div>
+      <div><span class="col-tag tag-agg">중복제거</span></div>
+      <div class="col-desc">배송비 대표행 (1=대표) → krw_delivery_fee 중복 방지</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">order_id / order_line_id</div>
+      <div><span class="col-tag tag-dim">차원</span></div>
+      <div class="col-desc">주문 / 주문상품 식별자 (COUNT DISTINCT)</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">user_id</div>
+      <div><span class="col-tag tag-met">지표</span></div>
+      <div class="col-desc">구매자 수 (COUNT DISTINCT)</div>
+    </div>
+    <div class="col-item">
+      <div class="col-name">bm_type / bm_type_nm</div>
+      <div><span class="col-tag tag-dim">차원</span></div>
+      <div class="col-desc">비즈모델 타입 (CO/LI/DP/CM 등)</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ 3. TAB SPECS ═══════════════════════════════════════ -->
+<div class="section-label">3. 탭별 데이터 명세</div>
+
+<div class="tabs-grid">
+
+  <!-- ── 전체 탭 ── -->
+  <div class="tab-card">
+    <div class="tab-card-header tab-전체">
+      📊 전체탭
+    </div>
+    <div class="tab-card-body">
+
+      <div class="spec-row">
+        <div class="spec-label">화면 구성</div>
+        <div class="spec-val">KPI 카드(누적) · 최근 7일 라인차트 · 당일 실시간 매출차트</div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">공통 필터</div>
+        <div class="spec-val">
+          <span class="chip filter">partner_id = :partner_id</span>
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">KPI 누적</div>
+        <div class="spec-val">
+          <span class="tbl">mart_daily_order</span> WHERE <code>completed_dt BETWEEN :start AND :end</code><br>
+          <span class="chip metric">결제거래액</span>
+          <span class="chip metric">결제주문수</span>
+          <span class="chip metric">구매자수</span>
+          <span class="chip metric">배송비</span>
+          <span class="chip metric">쿠폰할인액</span>
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">7일 추이</div>
+        <div class="spec-val">
+          <span class="tbl">mart_daily_order</span><br>
+          <code>GROUP BY completed_dt</code> (최근 7일)<br>
+          <span class="chip group">completed_dt</span> → 일별 거래액 추이
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">실시간 (RT)</div>
+        <div class="spec-val" style="color:#b45309;">
+          ⚡ <span class="tbl">order_ro</span> + <span class="tbl">order_line_ro</span><br>
+          <code>DATE(created_at AT TIME ZONE 'Asia/Seoul') = CURRENT_DATE</code><br>
+          마트 T+1이므로 raw 테이블 직접 조회<br>
+          <span class="chip group">hour</span> → 시간별 집계
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">핵심 집계식</div>
+        <div class="spec-val">
+          <code>SUM(IF(amt_rk=1, krw_amount, 0))</code> — 결제거래액<br>
+          <code>COUNT(DISTINCT order_id)</code> — 주문수<br>
+          <code>COUNT(DISTINCT user_id)</code> — 구매자수
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 아티스트 탭 ── -->
+  <div class="tab-card">
+    <div class="tab-card-header tab-아티스트">
+      🎤 아티스트탭
+    </div>
+    <div class="tab-card-body">
+
+      <div class="spec-row">
+        <div class="spec-label">화면 구성</div>
+        <div class="spec-val">아티스트 다중선택 드롭다운 · 7일 라인차트 · 기간 텍스트 테이블</div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">필터 파라미터</div>
+        <div class="spec-val">
+          <span class="chip filter">partner_id = :partner_id</span>
+          <span class="chip filter">artist_id IN (:artist_ids) — 다중</span>
+          <span class="chip filter">completed_dt BETWEEN :start AND :end</span>
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">드롭다운 소스</div>
+        <div class="spec-val">
+          <span class="tbl">mart_daily_order</span><br>
+          <code>SELECT DISTINCT artist_id, artist_name</code><br>
+          <code>WHERE partner_id = :partner_id</code><br>
+          ※ OR <span class="tbl">artist_ro</span> JOIN <span class="tbl">contract_project_ro</span><br>
+          &nbsp;&nbsp;WHERE bizpartnerid = :partner_id
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">7일 추이</div>
+        <div class="spec-val">
+          <code>GROUP BY completed_dt, artist_id</code><br>
+          <span class="chip group">completed_dt</span>
+          <span class="chip group">artist_id</span>
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">텍스트 테이블</div>
+        <div class="spec-val">
+          <code>GROUP BY artist_id, artist_name</code><br>
+          <span class="chip metric">거래액</span>
+          <span class="chip metric">주문수</span>
+          <span class="chip metric">구매자수</span>
+          <span class="chip metric">구매수량</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 상품(프로젝트) 탭 ── -->
+  <div class="tab-card">
+    <div class="tab-card-header tab-상품">
+      📦 상품(프로젝트)탭
+    </div>
+    <div class="tab-card-body">
+
+      <div class="spec-row">
+        <div class="spec-label">화면 구성</div>
+        <div class="spec-val">프로젝트×아티스트×상품 다중선택 드롭다운 · 기간 텍스트 테이블</div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">필터 파라미터</div>
+        <div class="spec-val">
+          <span class="chip filter">partner_id = :partner_id</span>
+          <span class="chip filter">project_id IN (:project_ids)</span>
+          <span class="chip filter">artist_id IN (:artist_ids)</span>
+          <span class="chip filter">product_id IN (:product_ids)</span>
+          <span class="chip filter">completed_dt BETWEEN :start AND :end</span>
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">필터 연동<br>규칙</div>
+        <div class="spec-val">
+          프로젝트 선택 → 하위 아티스트 목록 갱신<br>
+          아티스트 선택 → 하위 상품 목록 갱신<br>
+          (계단식 Cascading Filter)
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">드롭다운 소스</div>
+        <div class="spec-val">
+          <span class="tbl">mart_daily_order</span><br>
+          <code>SELECT DISTINCT project_id, project_name</code><br>
+          <code>SELECT DISTINCT artist_id, artist_name WHERE project_id IN (...)</code><br>
+          <code>SELECT DISTINCT product_id, product_name WHERE artist_id IN (...)</code>
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">텍스트 테이블</div>
+        <div class="spec-val">
+          <code>GROUP BY project_id, artist_id, product_id, sku_id</code><br>
+          <span class="chip metric">거래액</span>
+          <span class="chip metric">주문수</span>
+          <span class="chip metric">구매자수</span>
+          <span class="chip metric">구매수량</span>
+          <span class="chip metric">취소수량</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 국가탭 ── -->
+  <div class="tab-card">
+    <div class="tab-card-header tab-국가">
+      🌍 국가탭
+    </div>
+    <div class="tab-card-body">
+
+      <div class="spec-row">
+        <div class="spec-label">화면 구성</div>
+        <div class="spec-val">국가 단일선택 · 아티스트 단일선택 · 국가별 트리맵 · 엑셀 다운로드</div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">필터 파라미터</div>
+        <div class="spec-val">
+          <span class="chip filter">partner_id = :partner_id</span>
+          <span class="chip filter">country_type = 'join' OR 'receiver' — 단일</span>
+          <span class="chip filter">artist_id = :artist_id — 단일</span>
+          <span class="chip filter">completed_dt BETWEEN :start AND :end</span>
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">국가 컬럼<br>분기</div>
+        <div class="spec-val">
+          가입국가 선택 시: <code>GROUP BY join_country, join_country_nm</code><br>
+          배송국가 선택 시: <code>GROUP BY receiver_country, receiver_country_nm</code><br>
+          → country_type 파라미터로 동적 분기
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">트리맵 데이터</div>
+        <div class="spec-val">
+          <code>GROUP BY country, country_nm</code><br>
+          <span class="chip metric">거래액</span>
+          <span class="chip metric">구매자수</span>
+          <span class="chip metric">주문수</span>
+          → 거래액 기준 면적 비율
+        </div>
+      </div>
+
+      <div class="spec-row">
+        <div class="spec-label">엑셀 다운로드</div>
+        <div class="spec-val">
+          텍스트 테이블 전체 데이터 xlsx export<br>
+          필터 조건 동일 적용, 행 수 제한 없음
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /tabs-grid -->
+
+
+<!-- ═══════════════════════════════════════ 4. JOIN PATHS ═══════════════════════════════════════ -->
+<div class="section-label">4. 주요 JOIN 경로 (필터 드롭다운 구성 시)</div>
+
+<div class="join-diagram">
+  <h3>드롭다운 옵션 조회 — 파트너 기준 차원 목록</h3>
+
+  <div class="join-path">
+    <span class="jp-tbl dim">mart_daily_order</span>
+    <span class="jp-arrow">─</span>
+    <span class="jp-key">WHERE partner_id = :pid</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-tbl">DISTINCT artist_id, artist_name</span>
+    <span class="jp-label">← 아티스트 드롭다운</span>
+  </div>
+
+  <div class="join-path">
+    <span class="jp-tbl dim">mart_daily_order</span>
+    <span class="jp-arrow">─</span>
+    <span class="jp-key">WHERE partner_id = :pid</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-tbl">DISTINCT project_id, project_name</span>
+    <span class="jp-label">← 프로젝트 드롭다운</span>
+  </div>
+
+  <div class="join-path">
+    <span class="jp-tbl dim">mart_daily_order</span>
+    <span class="jp-arrow">─</span>
+    <span class="jp-key">WHERE project_id IN (:pids)</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-tbl">DISTINCT product_id, product_name</span>
+    <span class="jp-label">← 상품 드롭다운 (Cascading)</span>
+  </div>
+
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0;">
+  <h3>원본 테이블 JOIN (실시간 집계 또는 마트 미포함 컬럼 조회 시)</h3>
+
+  <div class="join-path">
+    <span class="jp-tbl">order_ro</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-key">order_ro.id = order_line_ro.order_id</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-tbl">order_line_ro</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-key">sku_id = sku_ro.id</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-tbl">sku_ro</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-key">sku_group_id = sku_group_ro.id</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-tbl">sku_group_ro</span>
+  </div>
+
+  <div class="join-path" style="margin-top:6px;">
+    <span class="jp-tbl">sku_group_ro</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-key">project_id = contract_project_ro._id</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-tbl">contract_project_ro</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-key">artist_id = artist_ro._id</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-tbl">artist_ro</span>
+  </div>
+
+  <div class="join-path" style="margin-top:6px;">
+    <span class="jp-tbl">order_ro</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-key">user_id = user_ro.id</span>
+    <span class="jp-arrow">→</span>
+    <span class="jp-tbl">user_ro</span>
+    <span class="jp-key" style="margin-left:4px;">(join_country, 국가탭)</span>
+  </div>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════ 5. SAMPLE SQL ═══════════════════════════════════════ -->
+<div class="section-label">5. 집계 쿼리 패턴 예시 (Presto SQL)</div>
+
+<div class="sql-wrap">
+  <div class="sql-title">— 전체탭: 기간 KPI 집계 (mart_daily_order 기준)</div>
+  <pre class="sql"><span class="kw">SELECT</span>
+    <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> user_id)                                           <span class="kw">AS</span> buyer_cnt,
+    <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> order_id)                                           <span class="kw">AS</span> order_cnt,
+    <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> order_line_id)                                       <span class="kw">AS</span> order_line_cnt,
+    <span class="fn">SUM</span>(<span class="fn">IF</span>(amt_rk = <span class="num">1</span>, <span class="fn">COALESCE</span>(krw_amount, <span class="num">0</span>), <span class="num">0</span>))                  <span class="kw">AS</span> gmv,              <span class="cmt">-- 결제거래액</span>
+    <span class="fn">SUM</span>(<span class="fn">IF</span>(delivery_rk = <span class="num">1</span>, <span class="fn">COALESCE</span>(krw_delivery_fee, <span class="num">0</span>), <span class="num">0</span>))        <span class="kw">AS</span> delivery_fee,      <span class="cmt">-- 배송비</span>
+    <span class="fn">SUM</span>(<span class="fn">COALESCE</span>(real_discount_amount, <span class="num">0</span>))                             <span class="kw">AS</span> coupon_discount     <span class="cmt">-- 쿠폰할인</span>
+<span class="kw">FROM</span> <span class="tbl">journi_y222.mart_daily_order</span>
+<span class="kw">WHERE</span> partner_id = <span class="num">:partner_id</span>
+  <span class="kw">AND</span> completed_dt <span class="kw">BETWEEN</span> <span class="str">:start_dt</span> <span class="kw">AND</span> <span class="str">:end_dt</span>
+  <span class="cmt">-- cancel_yn 조건 없음 → 취소 포함 총 기준 (순 기준은 명시 요청 시에만)</span>
+</pre>
+</div>
+
+<div class="sql-wrap">
+  <div class="sql-title">— 아티스트탭: 아티스트별 일별 추이 (7일)</div>
+  <pre class="sql"><span class="kw">SELECT</span>
+    completed_dt,
+    artist_id,
+    artist_name,
+    <span class="fn">SUM</span>(<span class="fn">IF</span>(amt_rk = <span class="num">1</span>, <span class="fn">COALESCE</span>(krw_amount, <span class="num">0</span>), <span class="num">0</span>))  <span class="kw">AS</span> gmv,
+    <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> order_id)                          <span class="kw">AS</span> order_cnt
+<span class="kw">FROM</span> <span class="tbl">journi_y222.mart_daily_order</span>
+<span class="kw">WHERE</span> partner_id = <span class="num">:partner_id</span>
+  <span class="kw">AND</span> completed_dt <span class="kw">BETWEEN</span> <span class="fn">DATE_FORMAT</span>(<span class="fn">DATE_ADD</span>(<span class="str">'day'</span>, <span class="num">-6</span>, <span class="fn">CURRENT_DATE</span>), <span class="str">'%Y-%m-%d'</span>) <span class="kw">AND</span> <span class="fn">DATE_FORMAT</span>(<span class="fn">CURRENT_DATE</span>, <span class="str">'%Y-%m-%d'</span>)
+  <span class="kw">AND</span> artist_id <span class="kw">IN</span> (<span class="num">:artist_ids</span>)     <span class="cmt">-- 다중선택, 미선택 시 조건 제거</span>
+<span class="kw">GROUP BY</span> <span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>
+<span class="kw">ORDER BY</span> <span class="num">1</span> <span class="kw">DESC</span>, gmv <span class="kw">DESC</span>
+</pre>
+</div>
+
+<div class="sql-wrap">
+  <div class="sql-title">— 국가탭: 국가별 거래액 (트리맵 데이터 / 가입국가 기준)</div>
+  <pre class="sql"><span class="kw">SELECT</span>
+    join_country                                             <span class="kw">AS</span> country_code,
+    join_country_nm                                          <span class="kw">AS</span> country_name,
+    <span class="fn">SUM</span>(<span class="fn">IF</span>(amt_rk = <span class="num">1</span>, <span class="fn">COALESCE</span>(krw_amount, <span class="num">0</span>), <span class="num">0</span>))      <span class="kw">AS</span> gmv,
+    <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> user_id)                                <span class="kw">AS</span> buyer_cnt,
+    <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> order_id)                                <span class="kw">AS</span> order_cnt,
+    <span class="fn">ROUND</span>(<span class="num">100.0</span> * <span class="fn">SUM</span>(<span class="fn">IF</span>(amt_rk=<span class="num">1</span>, <span class="fn">COALESCE</span>(krw_amount,<span class="num">0</span>),<span class="num">0</span>))
+        / <span class="fn">NULLIF</span>(<span class="fn">SUM</span>(<span class="fn">SUM</span>(<span class="fn">IF</span>(amt_rk=<span class="num">1</span>,<span class="fn">COALESCE</span>(krw_amount,<span class="num">0</span>),<span class="num">0</span>))) <span class="kw">OVER</span>(), <span class="num">0</span>), <span class="num">1</span>) <span class="kw">AS</span> gmv_share_pct   <span class="cmt">-- 구성비</span>
+<span class="kw">FROM</span> <span class="tbl">journi_y222.mart_daily_order</span>
+<span class="kw">WHERE</span> partner_id = <span class="num">:partner_id</span>
+  <span class="kw">AND</span> completed_dt <span class="kw">BETWEEN</span> <span class="str">:start_dt</span> <span class="kw">AND</span> <span class="str">:end_dt</span>
+  <span class="kw">AND</span> (<span class="num">:artist_id</span> <span class="kw">IS NULL OR</span> artist_id = <span class="num">:artist_id</span>)   <span class="cmt">-- 단일선택, 미선택 시 전체</span>
+<span class="kw">GROUP BY</span> <span class="num">1</span>, <span class="num">2</span>
+<span class="kw">ORDER BY</span> gmv <span class="kw">DESC</span>
+</pre>
+</div>
+
+
+<!-- ═══════════════════════════════════════ NOTE ═══════════════════════════════════════ -->
+<div class="note-box">
+  <strong>⚠️ 개발 유의사항</strong><br>
+  1. <strong>amt_rk = 1 중복제거 필수</strong> — mart_daily_order는 order_line 단위 행이므로 주문금액(krw_amount) 집계 시 반드시 <code>IF(amt_rk=1,...)</code> 적용. 미적용 시 상품수만큼 중복 합산.<br>
+  2. <strong>delivery_rk = 1 중복제거 필수</strong> — 배송비(krw_delivery_fee)도 동일. 묶음 배송 시 1건만 대표.<br>
+  3. <strong>취소(cancel_yn) 기본 포함</strong> — 취소제외 집계는 프론트에서 명시적 "순 기준" 선택 시에만. 기본값 = 전체(총 기준).<br>
+  4. <strong>실시간 탭</strong> — mart는 T+1 배치. 당일 실시간 조회는 <code>order_ro</code> 원본 직접 조회 필요.<br>
+  5. <strong>국가 컬럼 분기</strong> — 가입국가: <code>join_country</code> / 배송국가: <code>receiver_country</code>. 프론트 라디오버튼 값으로 동적 분기.
+</div>
+
+<div style="text-align:right;font-size:11px;color:#9ca3af;margin-top:8px;">
+  Generated from journi_y222.mart_daily_order ERD · 2026-04-20
+</div>
+
+</body>
+</html>

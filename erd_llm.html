@@ -417,6 +417,27 @@
     flex-shrink: 0;
   }
 
+  /* 검색 결과 패널 내 테이블 헤더 강조 */
+  #search-results-grid .table-header {
+    border-bottom: 2px solid var(--color);
+    background: rgba(var(--color-rgb, 255,255,255), 0.07);
+    padding: 7px 10px;
+  }
+  #search-results-grid .table-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color);
+  }
+  /* 매칭 컬럼 수 배지 */
+  #search-results-grid .table-header::after {
+    content: attr(data-match-count);
+    font-size: 10px;
+    font-weight: 600;
+    color: #a6e3a1;
+    margin-left: auto;
+    padding-left: 8px;
+  }
+
   /* ── LLM SQL 생성 패널 ─────────────────────────────────────────────── */
 
   #llm-panel {
@@ -557,7 +578,7 @@
   <div id="col-search-wrap">
     <div id="col-search-container">
       <span id="col-search-icon">🔍</span>
-      <input id="col-search" type="text" placeholder="컬럼명 검색..." autocomplete="off" spellcheck="false" />
+      <input id="col-search" type="text" placeholder="테이블 · 컬럼 검색..." autocomplete="off" spellcheck="false" />
       <button id="col-search-clear" title="검색 초기화">✕</button>
     </div>
     <span id="col-search-count"></span>
@@ -3132,9 +3153,10 @@ function clearAllHighlights() {
       searchActive = true;
     }
 
-    // grid 비우기 (이전 검색 결과 초기화 — 카드는 이미 origin에 기억됨)
     // 기존 카드 모두 원위치 복원 후 재이동
     restoreCards();
+
+    let totalMatchedCols = 0;
 
     // 매칭 카드를 grid로 이동
     matchingCards.forEach(card => {
@@ -3142,16 +3164,46 @@ function clearAllHighlights() {
         parent: card.parentElement,
         next:   card.nextSibling,
       });
+
+      // 컬럼 매칭이 있는 카드: 비매칭 컬럼 숨기고 매칭 컬럼만 표시
+      const matchedCols = card.querySelectorAll('.col-row.search-match');
+      const hdr = card.querySelector('.table-header');
+      if (matchedCols.length > 0) {
+        card.querySelectorAll('.col-row:not(.search-match)').forEach(r => {
+          r.dataset.hiddenBySearch = '1';
+          r.style.display = 'none';
+        });
+        totalMatchedCols += matchedCols.length;
+        // 헤더에 매칭 컬럼 수 배지 표시
+        if (hdr) hdr.dataset.matchCount = matchedCols.length + '개 컬럼 매칭';
+      } else {
+        // 테이블명 매칭: 전체 컬럼 수 표시
+        const allCols = card.querySelectorAll('.col-row').length;
+        if (hdr) hdr.dataset.matchCount = '테이블명 일치 · ' + allCols + '개 컬럼';
+      }
+
       grid.appendChild(card);
     });
 
     // 헤더 텍스트
     srQuery.innerHTML = `<strong>"${q}"</strong> 검색 결과`;
-    srCount.textContent = `${matchingCards.length}개 테이블 · ${matchingCards.reduce((s,c)=>s+c.querySelectorAll('.col-row.search-match').length,0)}개 컬럼`;
+    if (totalMatchedCols > 0) {
+      srCount.textContent = `${matchingCards.length}개 테이블 · ${totalMatchedCols}개 컬럼`;
+    } else {
+      srCount.textContent = `${matchingCards.length}개 테이블`;
+    }
   }
 
   function restoreCards() {
     cardOrigin.forEach(({parent, next}, card) => {
+      // 숨겼던 컬럼 복원
+      card.querySelectorAll('.col-row[data-hidden-by-search]').forEach(r => {
+        r.style.display = '';
+        delete r.dataset.hiddenBySearch;
+      });
+      // 헤더 배지 초기화
+      const hdr = card.querySelector('.table-header');
+      if (hdr) delete hdr.dataset.matchCount;
       if (next && next.parentElement === parent) {
         parent.insertBefore(card, next);
       } else {
