@@ -1,0 +1,10 @@
+{
+  "naver_client_id":     "여기에_Client_ID_입력",
+  "naver_client_secret": "여기에_Client_Secret_입력",
+  "claude_api_key":      "여기에_Claude_API_Key_입력",
+  "top_n": 5,
+  "score_weight": {
+    "visitor": 0.4,
+    "buyer":   0.6
+  }
+}
