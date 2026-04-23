@@ -6,7 +6,7 @@ weekly_report.py — 주간 TOP 상품 외부 트렌드 자동 리포트
   python weekly_report.py --start 2026-04-14 --end 2026-04-20 --input sample_input.csv
 
 필수 패키지:
-  pip install anthropic requests
+  pip install requests   ← requests만 있으면 됩니다 (Python 3.7 호환)
 """
 
 import argparse
@@ -17,7 +17,6 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import anthropic
 import requests
 
 
@@ -62,7 +61,7 @@ def load_top_products(csv_path: str, top_n: int, weights: dict) -> list:
 # 3. 네이버 DataLab — 검색어 트렌드
 # ══════════════════════════════════════════════════════
 
-def get_search_trend(cid: str, csec: str, keyword: str, start: str, end: str) -> dict | None:
+def get_search_trend(cid, csec, keyword, start, end):
     """이번 주 vs 전주 검색량 지수 비교"""
     prev_start = (datetime.strptime(start, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
     prev_end   = (datetime.strptime(end,   "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -168,8 +167,8 @@ def get_news(cid: str, csec: str, keyword: str, start: str, end: str) -> list:
 # 5. Claude 분석
 # ══════════════════════════════════════════════════════
 
-def analyze(client: anthropic.Anthropic, product: dict, trend: dict | None, news: list,
-            start: str, end: str) -> str:
+def analyze(api_key: str, product: dict, trend, news: list, start: str, end: str) -> str:
+    """Claude API를 requests로 직접 호출 (anthropic SDK 불필요)"""
     conv_rate = (
         round(product["buyer_cnt"] / product["visitor_cnt"] * 100, 1)
         if product["visitor_cnt"] > 0 else 0
@@ -178,51 +177,71 @@ def analyze(client: anthropic.Anthropic, product: dict, trend: dict | None, news
     trend_text = "검색 트렌드 데이터 없음"
     if trend:
         direction = (
-            "📈 상승" if trend["change_pct"] > 5
-            else "📉 하락" if trend["change_pct"] < -5
-            else "➡️ 보합"
+            "상승" if trend["change_pct"] > 5
+            else "하락" if trend["change_pct"] < -5
+            else "보합"
         )
         trend_text = (
-            f"네이버 검색량 지수: 이번주 평균 {trend['this_avg']} / 전주 평균 {trend['prev_avg']} "
-            f"({direction} {abs(trend['change_pct'])}%)"
+            "네이버 검색량 지수: 이번주 평균 {} / 전주 평균 {} ({} {}%)".format(
+                trend["this_avg"], trend["prev_avg"], direction, abs(trend["change_pct"])
+            )
         )
 
     news_text = "\n".join(
-        [f"- [{n['pubDate']}] {n['title']}: {n['description']}" for n in news]
+        ["- [{}] {}: {}".format(n["pubDate"], n["title"], n["description"]) for n in news]
     ) or "관련 뉴스 없음"
 
-    prompt = f"""다음 상품의 주간 외부 트렌드를 분석해주세요.
-
-## 상품 정보
-- 상품명: {product['product_name']}
-- 아티스트: {product['artist_name']}
-- 분석 기간: {start} ~ {end}
-
-## 내부 실적
-- 방문자수: {product['visitor_cnt']:,}명
-- 구매자수: {product['buyer_cnt']:,}명
-- 전환율: {conv_rate}%
-- 거래액: {product['gmv']:,}원
-
-## 외부 트렌드
-{trend_text}
-
-## 관련 뉴스 ({len(news)}건)
-{news_text}
-
-아래 3가지를 각각 2~3문장으로 간결하게 작성해주세요:
-1. **외부 트렌드 요약**: 이번 주 외부 반응 흐름
-2. **내외부 연관성**: 내부 실적과 외부 트렌드의 관계
-3. **다음 주 전망**: 한 줄로
-
-마크다운 bold(**) 표시는 유지하고, 전체 200자 이내로 작성하세요."""
-
-    msg = client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=600,
-        messages=[{"role": "user", "content": prompt}],
+    prompt = (
+        "다음 상품의 주간 외부 트렌드를 분석해주세요.\n\n"
+        "## 상품 정보\n"
+        "- 상품명: {product_name}\n"
+        "- 아티스트: {artist_name}\n"
+        "- 분석 기간: {start} ~ {end}\n\n"
+        "## 내부 실적\n"
+        "- 방문자수: {visitor_cnt}명\n"
+        "- 구매자수: {buyer_cnt}명\n"
+        "- 전환율: {conv_rate}%\n"
+        "- 거래액: {gmv}원\n\n"
+        "## 외부 트렌드\n{trend_text}\n\n"
+        "## 관련 뉴스 ({news_cnt}건)\n{news_text}\n\n"
+        "아래 3가지를 각각 2~3문장으로 간결하게 작성해주세요:\n"
+        "1. **외부 트렌드 요약**: 이번 주 외부 반응 흐름\n"
+        "2. **내외부 연관성**: 내부 실적과 외부 트렌드의 관계\n"
+        "3. **다음 주 전망**: 한 줄로\n\n"
+        "마크다운 bold(**) 표시는 유지하고, 전체 200자 이내로 작성하세요."
+    ).format(
+        product_name=product["product_name"],
+        artist_name=product["artist_name"],
+        start=start, end=end,
+        visitor_cnt="{:,}".format(product["visitor_cnt"]),
+        buyer_cnt="{:,}".format(product["buyer_cnt"]),
+        conv_rate=conv_rate,
+        gmv="{:,}".format(product["gmv"]),
+        trend_text=trend_text,
+        news_cnt=len(news),
+        news_text=news_text,
     )
-    return msg.content[0].text
+
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key":           api_key,
+                "anthropic-version":   "2023-06-01",
+                "content-type":        "application/json",
+            },
+            json={
+                "model":      "claude-sonnet-4-5",
+                "max_tokens": 600,
+                "messages":   [{"role": "user", "content": prompt}],
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()["content"][0]["text"]
+    except Exception as e:
+        print("  ⚠️ Claude API 오류: {}".format(e))
+        return "AI 분석을 가져오지 못했습니다."
 
 
 # ══════════════════════════════════════════════════════
@@ -603,24 +622,24 @@ def main():
     for i, p in enumerate(products, 1):
         print(f"   {i}. {p['product_name']} ({p['artist_name']}) — 방문자 {p['visitor_cnt']:,} / 구매자 {p['buyer_cnt']:,}")
 
-    claude  = anthropic.Anthropic(api_key=cfg["claude_api_key"])
-    cid     = cfg["naver_client_id"]
-    csec    = cfg["naver_client_secret"]
+    claude_key = cfg["claude_api_key"]
+    cid        = cfg["naver_client_id"]
+    csec       = cfg["naver_client_secret"]
 
     results = []
     for i, product in enumerate(products, 1):
-        print(f"\n[{i}/{len(products)}] {product['product_name']} 분석 중...")
+        print("[{}/{}] {} 분석 중...".format(i, len(products), product["product_name"]))
 
-        print("  → DataLab 검색 트렌드 조회")
+        print("  -> DataLab 검색 트렌드 조회")
         trend = get_search_trend(cid, csec, product["product_name"], args.start, args.end)
 
-        kw = f"{product['artist_name']} {product['product_name']}"
-        print(f"  → 뉴스 검색 ({kw})")
+        kw = "{} {}".format(product["artist_name"], product["product_name"])
+        print("  -> 뉴스 검색 ({})".format(kw))
         news = get_news(cid, csec, kw, args.start, args.end)
-        print(f"     기사 {len(news)}건 수집")
+        print("     기사 {}건 수집".format(len(news)))
 
-        print("  → Claude 분석 중...")
-        ai_text = analyze(claude, product, trend, news, args.start, args.end)
+        print("  -> Claude 분석 중...")
+        ai_text = analyze(claude_key, product, trend, news, args.start, args.end)
 
         results.append({"product": product, "trend": trend, "news": news, "analysis": ai_text})
         print("  ✓ 완료")
