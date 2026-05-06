@@ -3455,8 +3455,8 @@ function toggleDomain(clickedDomain) {
     });
   }
 
-  // 새로 추가된 컬럼으로 스크롤
-  if (domainVisible[clickedDomain]) {
+  // 첫 선택 시만 해당 컬럼으로 스크롤 (추가 선택 시엔 기존 화면 고정)
+  if (domainVisible[clickedDomain] && selectionOrder.length === 1) {
     const col = document.querySelector(`.domain-col[data-domain="${clickedDomain}"]`);
     if (col) setTimeout(() => col.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' }), 30);
   }
