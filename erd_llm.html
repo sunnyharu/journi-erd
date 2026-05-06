@@ -3455,6 +3455,10 @@ function toggleDomain(clickedDomain) {
     });
   }
 
+  // 기존 FK 선 및 하이라이트 제거
+  clearAllHighlights();
+  requestAnimationFrame(() => syncSvgSize());
+
   // 첫 선택 시 캔버스 왼쪽으로 리셋 → 선택 도메인이 왼쪽 고정
   if (selectionOrder.length === 1 && domainVisible[clickedDomain]) {
     setTimeout(() => { document.getElementById('canvas-wrap').scrollLeft = 0; }, 30);
@@ -3643,8 +3647,9 @@ function drawLine(srcEl, dstEl, color, domain) {
   const src = getCenter(srcEl, 'right');
   const dst = getCenter(dstEl, 'left');
 
-  // Determine if same side (same approximate x) → exit left
-  const sameSide = Math.abs(src.x - dst.x) < 320;
+  // Same column area: src and dst are in the same vertical column (x nearly equal)
+  // Use left-side loop. For cross-domain lines (dst is clearly to the right), use bezier.
+  const sameSide = dst.x - src.x < 60; // dst is not clearly to the right
 
   let d;
   if (sameSide) {
@@ -3656,8 +3661,7 @@ function drawLine(srcEl, dstEl, color, domain) {
     const dx = dstL.x - offset;
     d = `M${srcL.x},${srcL.y} C${sx - 40},${srcL.y} ${dx - 40},${dstL.y} ${dstL.x},${dstL.y}`;
   } else {
-    const midX = (src.x + dst.x) / 2;
-    const cpOffset = Math.min(Math.abs(dst.x - src.x) * 0.45, 150);
+    const cpOffset = Math.min(Math.abs(dst.x - src.x) * 0.45, 200);
     const cp1x = src.x + cpOffset;
     const cp2x = dst.x - cpOffset;
     d = `M${src.x},${src.y} C${cp1x},${src.y} ${cp2x},${dst.y} ${dst.x},${dst.y}`;
