@@ -4507,6 +4507,7 @@ function normalizeForSqlite(sql) {
     .replace(/journi_y222\./gi, '')
     .replace(/data_analysis\./gi, '')
     .replace(/AND\s+collect_date\s+\S+[^\n]*/gi, '')
+    .replace(/WHERE\s+collect_date\s+\S+[^\n]*/gi, 'WHERE 1=1')
     .replace(/AND\s+date_format\s*\([^)]+\)\s*=\s*collect_date[^\n]*/gi, '')
     .replace(/AND\s+date\s*\([^)]+\)\s+BETWEEN[^\n]*/gi, '')
     .replace(/AND\s+date\s*\([^)]+\)\s*=[^\n]*/gi, '')
