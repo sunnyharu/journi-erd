@@ -4121,6 +4121,12 @@ function handleColHover(row, evt) {
   if (html) showTooltip(html, evt);
 }
 
+// 현재 visible 도메인인지 확인
+function isTableVisible(tableName) {
+  const t = TABLES.find(x => x.name === tableName);
+  return t ? domainVisible[t.domain] : false;
+}
+
 function handleTableHover(hdr, evt) {
   clearAllHighlights();
   syncSvgSize();
@@ -4132,13 +4138,15 @@ function handleTableHover(hdr, evt) {
 
   const rels = fkIndex[tableName];
   const relatedTables = new Set([tableName]);
-  rels.out.forEach(r => relatedTables.add(r.dstTable));
-  rels.in.forEach(r => relatedTables.add(r.srcTable));
+  // 보이는 도메인의 관련 테이블만 포함
+  rels.out.forEach(r => { if (isTableVisible(r.dstTable)) relatedTables.add(r.dstTable); });
+  rels.in.forEach(r => { if (isTableVisible(r.srcTable)) relatedTables.add(r.srcTable); });
 
   dimAllExcept([...relatedTables]);
 
-  // Draw all FK out lines
+  // Draw FK out lines (visible domain only)
   rels.out.forEach(({ srcCol, dstTable, dstCol }) => {
+    if (!isTableVisible(dstTable)) return;
     const srcEl = document.getElementById(colId(tableName, srcCol));
     const dstEl = document.getElementById(colId(dstTable, dstCol));
     if (srcEl) srcEl.classList.add('fk-col-highlighted');
@@ -4146,8 +4154,9 @@ function handleTableHover(hdr, evt) {
     drawLine(srcEl, dstEl, color, domain);
   });
 
-  // Draw all FK in lines (from other tables pointing here)
+  // Draw FK in lines (visible domain only)
   rels.in.forEach(({ srcTable, srcCol, dstCol }) => {
+    if (!isTableVisible(srcTable)) return;
     const srcTableDomain = TABLES.find(t => t.name === srcTable)?.domain;
     const srcColor = srcTableDomain ? DOMAIN_COLORS[srcTableDomain] : '#89b4fa';
     const srcEl = document.getElementById(colId(srcTable, srcCol));
@@ -4157,18 +4166,20 @@ function handleTableHover(hdr, evt) {
     drawLine(srcEl, dstEl, srcColor, srcTableDomain);
   });
 
-  // Tooltip
+  // Tooltip (전체 FK 관계 표시, 숨겨진 도메인도 포함)
   let html = `<div class="tt-title">${tableName}</div>`;
   if (rels.out.length > 0) {
     html += `<div class="tt-item" style="margin-top:4px;color:#f9e2af;font-weight:600;">Outgoing FKs:</div>`;
     rels.out.forEach(r => {
-      html += `<div class="tt-item"><span class="tt-out">↗</span> ${r.srcCol} → ${r.dstTable}.${r.dstCol}</div>`;
+      const vis = isTableVisible(r.dstTable);
+      html += `<div class="tt-item" style="${vis ? '' : 'opacity:0.4'}"><span class="tt-out">↗</span> ${r.srcCol} → ${r.dstTable}.${r.dstCol}</div>`;
     });
   }
   if (rels.in.length > 0) {
     html += `<div class="tt-item" style="margin-top:4px;color:#a6e3a1;font-weight:600;">Incoming FKs:</div>`;
     rels.in.forEach(r => {
-      html += `<div class="tt-item"><span class="tt-in">↙</span> ${r.srcTable}.${r.srcCol} → ${r.dstCol}</div>`;
+      const vis = isTableVisible(r.srcTable);
+      html += `<div class="tt-item" style="${vis ? '' : 'opacity:0.4'}"><span class="tt-in">↙</span> ${r.srcTable}.${r.srcCol} → ${r.dstCol}</div>`;
     });
   }
   if (rels.out.length === 0 && rels.in.length === 0) {
@@ -4176,16 +4187,18 @@ function handleTableHover(hdr, evt) {
   }
   showTooltip(html, evt);
 
-  // Redraw on scroll
+  // Redraw on scroll (visible domain only)
   activeScrollHandler = () => {
     clearLines();
     syncSvgSize();
     rels.out.forEach(({ srcCol, dstTable, dstCol }) => {
+      if (!isTableVisible(dstTable)) return;
       const srcEl = document.getElementById(colId(tableName, srcCol));
       const dstEl = document.getElementById(colId(dstTable, dstCol));
       drawLine(srcEl, dstEl, color, domain);
     });
     rels.in.forEach(({ srcTable, srcCol, dstCol }) => {
+      if (!isTableVisible(srcTable)) return;
       const srcTableDomain = TABLES.find(t => t.name === srcTable)?.domain;
       const srcColor = srcTableDomain ? DOMAIN_COLORS[srcTableDomain] : '#89b4fa';
       const srcEl = document.getElementById(colId(srcTable, srcCol));
