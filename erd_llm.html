@@ -4500,16 +4500,39 @@ async function buildSampleDB() {
   return db;
 }
 
+// Presto SQL → SQLite 호환 정규화
+function normalizeForSqlite(sql) {
+  return sql
+    .replace(/ods_commerce_production\./gi, '')
+    .replace(/journi_y222\./gi, '')
+    .replace(/data_analysis\./gi, '')
+    .replace(/AND\s+collect_date\s+\S+[^\n]*/gi, '')
+    .replace(/AND\s+date_format\s*\([^)]+\)\s*=\s*collect_date[^\n]*/gi, '')
+    .replace(/AND\s+date\s*\([^)]+\)\s+BETWEEN[^\n]*/gi, '')
+    .replace(/AND\s+date\s*\([^)]+\)\s*=[^\n]*/gi, '')
+    .replace(/AND\s+common\.deployment\s*=\s*'[^']*'/gi, '')
+    .replace(/\s+AT\s+TIME\s+ZONE\s+'[^']+'/gi, '')
+    .replace(/(?:CAST\s*\(\s*)?ELEMENT_AT\s*\(\s*(?:custom_props|CUSTOM_PROPS)\s*,\s*'([^']+)'\s*\)(?:\s+AS\s+VARCHAR\s*\))?/gi, '"custom_props.$1"')
+    .replace(/date_format\s*\([^,]+,\s*'[^']+'\)/gi, "date('2026-01-01')")
+    .replace(/date_parse\s*\([^,)]+,\s*'[^']+'\)/gi, "'2026-01-01'")
+    .replace(/date_add\s*\([^)]+\)/gi, "'2026-01-01'")
+    .replace(/COUNT_IF\s*\(([^)]+)\)/gi, 'SUM(CASE WHEN $1 THEN 1 ELSE 0 END)')
+    .replace(/\$\{[^}]+\}/g, "'2026-01-01'");
+}
+
 async function runSampleSQL() {
   const runBtn = document.getElementById('llm-run-btn');
-  if (!_sqliteTestSQL) {
+  const prestoSQL = document.getElementById('llm-output').textContent.trim();
+  if (!prestoSQL || prestoSQL.startsWith('오류:') || prestoSQL.includes('SQL이 여기에')) {
     alert('먼저 SQL을 생성해주세요.');
     return;
   }
+  // SQLite TEST 블록 있으면 우선, 없으면 Presto SQL 정규화
+  const sqlToRun = _sqliteTestSQL || normalizeForSqlite(prestoSQL);
   runBtn.textContent = '실행 중...';
   try {
     const db = await buildSampleDB();
-    const results = db.exec(_sqliteTestSQL);
+    const results = db.exec(sqlToRun);
     const resultWrap = document.getElementById('llm-result-wrap');
     const tbl = document.getElementById('llm-result-table');
     const cnt = document.getElementById('llm-result-count');
