@@ -568,6 +568,7 @@
   #llm-run-btn:hover { background: #45475a; }
 
 </style>
+<script src="sample_data.js"></script>
 </head>
 <body>
 
@@ -4469,18 +4470,28 @@ async function buildSampleDB() {
   if (_sqliteDB) return _sqliteDB;
   const SQL = await loadSqlJs();
   const db = new SQL.Database();
+  const sampleData = (typeof SAMPLE_DATA !== 'undefined') ? SAMPLE_DATA : {};
 
   TABLES.forEach(t => {
+    // 컬럼명 정의 (dot 포함 컬럼은 따옴표 처리)
     const colDefs = t.cols.map(([name, type]) =>
       `"${name}" ${toSqliteType(type)}`
     ).join(', ');
     try { db.run(`CREATE TABLE IF NOT EXISTS "${t.name}" (${colDefs})`); } catch(e) {}
 
-    const rows = buildSampleRows(t.name, t.cols);
+    // 실제 샘플 데이터 우선, 없으면 ENUM_VALS 기반 생성
+    const rows = sampleData[t.name] || buildSampleRows(t.name, t.cols);
+    if (!rows.length) return;
+
+    // 실제 데이터의 키로 컬럼 목록 결정
+    const cols = Object.keys(rows[0]);
+    const keys = cols.map(n => `"${n}"`).join(', ');
+    const placeholders = cols.map(() => '?').join(', ');
     rows.forEach(row => {
-      const keys = t.cols.map(([n]) => `"${n}"`).join(', ');
-      const placeholders = t.cols.map(() => '?').join(', ');
-      const vals = t.cols.map(([n]) => row[n] !== undefined ? row[n] : null);
+      const vals = cols.map(n => {
+        const v = row[n];
+        return (v === undefined || v === '') ? null : v;
+      });
       try { db.run(`INSERT INTO "${t.name}" (${keys}) VALUES (${placeholders})`, vals); } catch(e) {}
     });
   });
