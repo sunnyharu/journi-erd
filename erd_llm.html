@@ -3401,16 +3401,33 @@ DOMAIN_ORDER.forEach(domain => {
 function toggleDomain(clickedDomain) {
   if (focusState) return;
 
-  domainVisible[clickedDomain] = !domainVisible[clickedDomain];
+  const allOn = DOMAIN_ORDER.every(d => domainVisible[d]);
 
-  const btn = document.querySelector(`.domain-btn[data-domain="${clickedDomain}"]`);
-  const col = document.querySelector(`.domain-col[data-domain="${clickedDomain}"]`);
-  if (btn) btn.className = 'domain-btn ' + (domainVisible[clickedDomain] ? 'active' : 'inactive');
-  if (col) col.style.display = domainVisible[clickedDomain] ? 'flex' : 'none';
+  if (allOn) {
+    // 전체 ON 상태 → 클릭한 것만 ON
+    DOMAIN_ORDER.forEach(d => { domainVisible[d] = (d === clickedDomain); });
+  } else if (domainVisible[clickedDomain]) {
+    // 이미 ON → OFF (마지막 하나면 전체 복원)
+    domainVisible[clickedDomain] = false;
+    const anyOn = DOMAIN_ORDER.some(d => domainVisible[d]);
+    if (!anyOn) DOMAIN_ORDER.forEach(d => { domainVisible[d] = true; });
+  } else {
+    // OFF → ON (추가 선택)
+    domainVisible[clickedDomain] = true;
+  }
 
-  // 활성화 시 해당 컬럼으로 스크롤
-  if (domainVisible[clickedDomain] && col) {
-    setTimeout(() => col.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' }), 30);
+  // 버튼·컬럼 상태 반영
+  DOMAIN_ORDER.forEach(d => {
+    const b = document.querySelector(`.domain-btn[data-domain="${d}"]`);
+    const col = document.querySelector(`.domain-col[data-domain="${d}"]`);
+    if (b)   b.className = 'domain-btn ' + (domainVisible[d] ? 'active' : 'inactive');
+    if (col) col.style.display = domainVisible[d] ? 'flex' : 'none';
+  });
+
+  // 활성화된 컬럼으로 스크롤
+  if (domainVisible[clickedDomain]) {
+    const col = document.querySelector(`.domain-col[data-domain="${clickedDomain}"]`);
+    if (col) setTimeout(() => col.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' }), 30);
   }
 }
 
