@@ -3398,33 +3398,64 @@ DOMAIN_ORDER.forEach(domain => {
   header.insertBefore(btn, colSearchWrap);
 });
 
+// 도메인 선택 순서 추적
+const selectionOrder = [];
+
 function toggleDomain(clickedDomain) {
   if (focusState) return;
 
   const allOn = DOMAIN_ORDER.every(d => domainVisible[d]);
 
   if (allOn) {
-    // 전체 ON 상태 → 클릭한 것만 ON
+    // 전체 ON → 클릭한 것만 ON, 순서 초기화
     DOMAIN_ORDER.forEach(d => { domainVisible[d] = (d === clickedDomain); });
+    selectionOrder.length = 0;
+    selectionOrder.push(clickedDomain);
   } else if (domainVisible[clickedDomain]) {
-    // 이미 ON → OFF (마지막 하나면 전체 복원)
+    // 이미 ON → OFF
     domainVisible[clickedDomain] = false;
-    const anyOn = DOMAIN_ORDER.some(d => domainVisible[d]);
-    if (!anyOn) DOMAIN_ORDER.forEach(d => { domainVisible[d] = true; });
+    selectionOrder.splice(selectionOrder.indexOf(clickedDomain), 1);
+    // 마지막 하나면 전체 복원
+    if (!DOMAIN_ORDER.some(d => domainVisible[d])) {
+      DOMAIN_ORDER.forEach(d => { domainVisible[d] = true; });
+      selectionOrder.length = 0;
+    }
   } else {
-    // OFF → ON (추가 선택)
+    // OFF → ON (오른쪽에 추가)
     domainVisible[clickedDomain] = true;
+    selectionOrder.push(clickedDomain);
   }
 
-  // 버튼·컬럼 상태 반영
+  // 버튼 상태 반영
   DOMAIN_ORDER.forEach(d => {
     const b = document.querySelector(`.domain-btn[data-domain="${d}"]`);
-    const col = document.querySelector(`.domain-col[data-domain="${d}"]`);
-    if (b)   b.className = 'domain-btn ' + (domainVisible[d] ? 'active' : 'inactive');
-    if (col) col.style.display = domainVisible[d] ? 'flex' : 'none';
+    if (b) b.className = 'domain-btn ' + (domainVisible[d] ? 'active' : 'inactive');
   });
 
-  // 활성화된 컬럼으로 스크롤
+  // 컬럼 순서 재배치: 선택 순서대로 DOM 정렬
+  const canvas = document.getElementById('canvas');
+  const svg = document.getElementById('svg-overlay');
+  if (selectionOrder.length > 0) {
+    // 선택된 것만 선택 순서대로 표시
+    selectionOrder.forEach(d => {
+      const col = document.querySelector(`.domain-col[data-domain="${d}"]`);
+      if (col) { col.style.display = 'flex'; canvas.appendChild(col); }
+    });
+    DOMAIN_ORDER.forEach(d => {
+      if (!domainVisible[d]) {
+        const col = document.querySelector(`.domain-col[data-domain="${d}"]`);
+        if (col) col.style.display = 'none';
+      }
+    });
+  } else {
+    // 전체 복원: 원래 DOMAIN_ORDER 순서로 재정렬
+    DOMAIN_ORDER.forEach(d => {
+      const col = document.querySelector(`.domain-col[data-domain="${d}"]`);
+      if (col) { col.style.display = 'flex'; canvas.appendChild(col); }
+    });
+  }
+
+  // 새로 추가된 컬럼으로 스크롤
   if (domainVisible[clickedDomain]) {
     const col = document.querySelector(`.domain-col[data-domain="${clickedDomain}"]`);
     if (col) setTimeout(() => col.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' }), 30);
