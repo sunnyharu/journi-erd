@@ -3455,10 +3455,9 @@ function toggleDomain(clickedDomain) {
     });
   }
 
-  // 첫 선택 시만 해당 컬럼으로 스크롤 (추가 선택 시엔 기존 화면 고정)
-  if (domainVisible[clickedDomain] && selectionOrder.length === 1) {
-    const col = document.querySelector(`.domain-col[data-domain="${clickedDomain}"]`);
-    if (col) setTimeout(() => col.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' }), 30);
+  // 첫 선택 시 캔버스 왼쪽으로 리셋 → 선택 도메인이 왼쪽 고정
+  if (selectionOrder.length === 1 && domainVisible[clickedDomain]) {
+    setTimeout(() => { document.getElementById('canvas-wrap').scrollLeft = 0; }, 30);
   }
 }
 
