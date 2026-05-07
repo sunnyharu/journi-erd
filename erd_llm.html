@@ -3643,7 +3643,27 @@ function buildTableCard(table) {
     const jsonKeys = (JSON_KEYS[table.name] || {})[colName];
     if (jsonKeys) row.dataset.jsonKeys = jsonKeys.join(',');
 
-    // Badges
+    // JSON expand toggle (▶) — 맨 앞에만
+    if (colType === 'json' && jsonKeys) {
+      const toggle = document.createElement('span');
+      toggle.className = 'json-toggle';
+      toggle.textContent = '▶';
+      row.appendChild(toggle);
+      row.classList.add('json-parent-row');
+      row.removeEventListener('click', null);
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleJsonChildren(row, table.name, colName, jsonKeys);
+      });
+    }
+
+    // 컬럼명 (뱃지보다 먼저)
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'col-name';
+    nameSpan.textContent = colName;
+    row.appendChild(nameSpan);
+
+    // 뱃지들 — 컬럼명 뒤
     if (isPK) {
       const b = document.createElement('span');
       b.className = 'badge pk';
@@ -3656,33 +3676,12 @@ function buildTableCard(table) {
       b.textContent = 'FK';
       row.appendChild(b);
     }
-    if (colType === 'json' && jsonKeys) {
-      // JSON expand toggle (▶ 버튼 + has-keys 뱃지)
-      const toggle = document.createElement('span');
-      toggle.className = 'json-toggle';
-      toggle.textContent = '▶';
-      row.insertBefore(toggle, row.firstChild);
-      row.classList.add('json-parent-row');
-      const jb = document.createElement('span');
-      jb.className = 'badge json has-keys';
-      jb.textContent = '{ }';
-      row.appendChild(jb);
-      row.removeEventListener('click', null);
-      row.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleJsonChildren(row, table.name, colName, jsonKeys);
-      });
-    } else if (colType === 'json') {
+    if (colType === 'json') {
       const b = document.createElement('span');
-      b.className = 'badge json';
+      b.className = 'badge json' + (jsonKeys ? ' has-keys' : '');
       b.textContent = '{ }';
       row.appendChild(b);
     }
-
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'col-name';
-    nameSpan.textContent = colName;
-    row.appendChild(nameSpan);
 
     const typeSpan = document.createElement('span');
     typeSpan.className = 'col-type';
@@ -3772,18 +3771,20 @@ function toggleJsonChildren(parentRow, tableName, colName, jsonKeys) {
       if (fkIndex[fkInfo.dstTable] && !fkIndex[fkInfo.dstTable].in.some(i => i.srcTable === tableName && i.srcCol === keyName)) {
         fkIndex[fkInfo.dstTable].in.push({ srcTable: tableName, srcCol: keyName, dstCol: fkInfo.dstCol });
       }
-      const b = document.createElement('span');
-      b.className = 'badge fk';
-      b.textContent = 'FK';
-      row.appendChild(b);
     }
 
+    // 컬럼명 먼저
     const nameSpan = document.createElement('span');
     nameSpan.className = 'col-name' + (fkInfo ? ' json-fk-key' : '');
     nameSpan.textContent = keyName;
     row.appendChild(nameSpan);
 
+    // 뱃지 + 타입 — 컬럼명 뒤
     if (fkInfo) {
+      const b = document.createElement('span');
+      b.className = 'badge fk';
+      b.textContent = 'FK';
+      row.appendChild(b);
       const typeSpan = document.createElement('span');
       typeSpan.className = 'col-type';
       typeSpan.textContent = `→ ${fkInfo.dstTable}`;
