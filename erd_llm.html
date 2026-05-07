@@ -195,6 +195,26 @@
   .badge.json { background: #313244; color: #cba6f7; border: 1px solid #45475a; cursor: help; }
   .badge.json.has-keys { background: #2d1f3d; color: #cba6f7; border: 1px solid #cba6f7; }
 
+  /* ── JSON expand / child rows ──────────────────────────────────── */
+  .json-parent-row { cursor: pointer; user-select: none; }
+  .json-toggle {
+    font-size: 7px; color: #cba6f7; margin-right: 3px; flex-shrink: 0;
+    display: inline-block; transition: transform 0.15s; width: 8px;
+  }
+  .json-parent-row.expanded .json-toggle { transform: rotate(90deg); }
+  .json-child-row {
+    display: none;
+    padding-left: 18px;
+    background: #181825;
+    border-left: 2px solid #3d2d5a;
+    gap: 4px;
+    font-size: 10px;
+  }
+  .json-child-row .col-name { color: #a6adc8; font-size: 10px; }
+  .json-child-row .col-name.json-fk-key { color: #89b4fa; }
+  .json-child-row .col-type { font-size: 9px; }
+  .json-child-row:hover { background: #1e1e36; }
+
   .col-name {
     flex: 1;
     min-width: 0;
@@ -3636,9 +3656,25 @@ function buildTableCard(table) {
       b.textContent = 'FK';
       row.appendChild(b);
     }
-    if (colType === 'json') {
+    if (colType === 'json' && jsonKeys) {
+      // JSON expand toggle (▶ 버튼 + has-keys 뱃지)
+      const toggle = document.createElement('span');
+      toggle.className = 'json-toggle';
+      toggle.textContent = '▶';
+      row.insertBefore(toggle, row.firstChild);
+      row.classList.add('json-parent-row');
+      const jb = document.createElement('span');
+      jb.className = 'badge json has-keys';
+      jb.textContent = '{ }';
+      row.appendChild(jb);
+      row.removeEventListener('click', null);
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleJsonChildren(row, table.name, colName, jsonKeys);
+      });
+    } else if (colType === 'json') {
       const b = document.createElement('span');
-      b.className = 'badge json' + (jsonKeys ? ' has-keys' : '');
+      b.className = 'badge json';
       b.textContent = '{ }';
       row.appendChild(b);
     }
@@ -3657,6 +3693,128 @@ function buildTableCard(table) {
   });
 
   return card;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// JSON COLUMN EXPAND / CHILD ROWS
+// ═══════════════════════════════════════════════════════════════════
+
+// JSON 하위 키 → FK 대상 테이블/컬럼 추론
+function inferJsonKeyFk(keyName) {
+  let prefix = null;
+  if (keyName.endsWith('_id')) {
+    prefix = keyName.slice(0, -3);
+  } else if (/[A-Z]/.test(keyName) && keyName.endsWith('Id')) {
+    // camelCase → snake_case (e.g. orderId → order, bundleDeliveryGroupId → bundle_delivery_group)
+    prefix = keyName.slice(0, -2).replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
+  }
+  if (!prefix) return null;
+
+  // 후보: prefix_ro, prefix 그대로
+  const candidates = [prefix + '_ro', prefix, prefix.replace(/_/g, '') + '_ro'];
+  for (const cand of candidates) {
+    const t = TABLES.find(x => x.name === cand);
+    if (t) {
+      const idCol = t.cols.find(([c]) => c === 'id' || c === '_id');
+      if (idCol) return { dstTable: t.name, dstCol: idCol[0], domain: t.domain };
+    }
+  }
+  return null;
+}
+
+// JSON child row의 ID
+function jsonChildId(tableName, parentCol, keyName) {
+  return `jcol-${tableName}-${parentCol}-${keyName}`;
+}
+
+function toggleJsonChildren(parentRow, tableName, colName, jsonKeys) {
+  const isExpanded = parentRow.classList.contains('expanded');
+  parentRow.classList.toggle('expanded');
+
+  const parentId = parentRow.id;
+  const existing = document.querySelectorAll(`.json-child-row[data-json-group="${parentId}"]`);
+
+  if (existing.length > 0) {
+    // 이미 생성됨 → show/hide
+    existing.forEach(r => { r.style.display = isExpanded ? 'none' : 'flex'; });
+    return;
+  }
+
+  // 최초 클릭 → child rows 생성
+  const card = parentRow.closest('.table-card');
+  let insertAfter = parentRow;
+
+  jsonKeys.forEach(keyName => {
+    const fkInfo = inferJsonKeyFk(keyName);
+
+    const row = document.createElement('div');
+    row.className = 'col-row json-child-row';
+    row.dataset.jsonGroup = parentId;
+    row.dataset.srcTable = tableName;
+    row.dataset.srcCol = keyName;
+    row.dataset.jsonParent = colName;
+    row.id = jsonChildId(tableName, colName, keyName);
+    row.style.display = 'flex';
+
+    if (fkInfo) {
+      row.classList.add('fk-row');
+      row.dataset.fkTable = fkInfo.dstTable;
+      row.dataset.fkCol = fkInfo.dstCol;
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleColClick(row);
+      });
+      // fkIndex에 동적 추가
+      if (fkIndex[tableName] && !fkIndex[tableName].out.some(o => o.srcCol === keyName)) {
+        fkIndex[tableName].out.push({ srcCol: keyName, dstTable: fkInfo.dstTable, dstCol: fkInfo.dstCol });
+      }
+      if (fkIndex[fkInfo.dstTable] && !fkIndex[fkInfo.dstTable].in.some(i => i.srcTable === tableName && i.srcCol === keyName)) {
+        fkIndex[fkInfo.dstTable].in.push({ srcTable: tableName, srcCol: keyName, dstCol: fkInfo.dstCol });
+      }
+      const b = document.createElement('span');
+      b.className = 'badge fk';
+      b.textContent = 'FK';
+      row.appendChild(b);
+    }
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'col-name' + (fkInfo ? ' json-fk-key' : '');
+    nameSpan.textContent = keyName;
+    row.appendChild(nameSpan);
+
+    if (fkInfo) {
+      const typeSpan = document.createElement('span');
+      typeSpan.className = 'col-type';
+      typeSpan.textContent = `→ ${fkInfo.dstTable}`;
+      row.appendChild(typeSpan);
+    }
+
+    // mouseover for FK line
+    row.addEventListener('mouseover', (e) => {
+      if (!fkInfo || focusState) return;
+      clearAllHighlights();
+      syncSvgSize();
+      const srcEl = document.getElementById(row.id);
+      const dstEl = document.getElementById(colId(fkInfo.dstTable, fkInfo.dstCol));
+      if (srcEl) srcEl.classList.add('fk-col-highlighted');
+      if (dstEl) dstEl.classList.add('col-highlighted');
+      const color = DOMAIN_COLORS[fkInfo.domain] || '#89b4fa';
+      if (isTableVisible(fkInfo.dstTable)) drawLine(srcEl, dstEl, color, fkInfo.domain);
+    });
+    row.addEventListener('mouseout', (e) => {
+      if (e.relatedTarget?.closest('.col-row')) return;
+      clearAllHighlights();
+    });
+
+    // insertAfter 다음에 삽입
+    if (insertAfter.nextSibling) {
+      card.insertBefore(row, insertAfter.nextSibling);
+    } else {
+      card.appendChild(row);
+    }
+    insertAfter = row;
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -4150,6 +4308,9 @@ document.addEventListener('mouseout', (evt) => {
 })
 
 function handleColHover(row, evt) {
+  // json-child-row는 자체 mouseover로 처리
+  if (row.classList.contains('json-child-row')) return;
+
   const desc = row.dataset.desc || '';
   const enums = row.dataset.enum || '';
   const jsonKeysRaw = row.dataset.jsonKeys || '';
