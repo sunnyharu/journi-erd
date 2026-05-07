@@ -192,6 +192,8 @@
   }
   .badge.pk { background: #f9e2af; color: #1e1e2e; }
   .badge.fk { background: #89b4fa; color: #1e1e2e; }
+  .badge.json { background: #313244; color: #cba6f7; border: 1px solid #45475a; cursor: help; }
+  .badge.json.has-keys { background: #2d1f3d; color: #cba6f7; border: 1px solid #cba6f7; }
 
   .col-name {
     flex: 1;
@@ -244,6 +246,8 @@
   .tt-desc  { color: #cdd6f4; font-size: 11px; margin: 4px 0 6px; line-height: 1.5; }
   .tt-section { color: #6c7086; font-size: 10px; font-weight: 600; text-transform: uppercase; margin: 6px 0 2px; letter-spacing: 0.05em; }
   .tt-enums { color: #f9e2af; font-size: 10px; font-family: monospace; }
+  .tt-json-keys { color: #cba6f7; font-size: 10px; font-family: monospace; line-height: 1.7; }
+  .tt-json-key  { display: inline-block; background: #2d1f3d; border: 1px solid #45475a; border-radius: 3px; padding: 0 4px; margin: 1px 2px; }
 
   #llm-panel-btn {
     padding: 4px 11px; background: #313244; border: 1px solid #45475a;
@@ -3306,6 +3310,44 @@ const ENUM_VALS = {
     zone_code:["H", "I", "J", "K", "M", "Z"]
   },
 };
+const JSON_KEYS = {
+  checkout_ro: {
+    checkout_data:["applicableCoupons", "bundles", "eventPolicyId", "fanClubInfos", "fanClubKey"]
+  },
+  community_artist_ro: {
+    name_set:["ko"],
+    tag_set:["tag", "tagBgColor"]
+  },
+  delivery_item_ro: {
+    item_info:["discountAmount", "name", "optionName", "orderedAt", "paidAt", "paymentAmount", "salePrice", "saleType"]
+  },
+  delivery_ro: {
+    order_snapshot:["totalDiscountAmount", "totalPaymentAmount"]
+  },
+  order_coupon_discount_ro: {
+    i18n:["results"]
+  },
+  order_product_ro: {
+    artist_i18n:["results"],
+    delivery_policy:["bundleDeliveryGroupId", "deliveryFeePolicy", "deliveryMethod", "jejuAreaDeliveryAvailable", "onlySingleDeliveryAvailable", "preSale", "preSaleDeliverEnd", "preSaleDeliverStart"],
+    mall_i18n:["results"],
+    pickup_policy:["warehouseId"],
+    product_i18n:["results"]
+  },
+  outgoing_item_ro: {
+    order_item_snapshot:["baseAmount", "discountAmount", "name", "option", "paymentAmount", "salePrice", "saleType"]
+  },
+  outgoing_ro: {
+    order_snapshot:["totalDiscountAmount", "totalPaymentAmount"]
+  },
+  payment_ro: {
+    payment_method_i18n:["results"]
+  },
+  product_ro: {
+    buyquantitylimit:["enabled", "max"],
+    receivingpolicy:["deliveryPolicy", "pickupInfos", "pickupPolicy", "receivingInfos", "receivingType", "returnInfos"]
+  },
+};
 
 
 // ═══════════════════════════════════════════════════════════════════
@@ -3573,11 +3615,13 @@ function buildTableCard(table) {
       handleColClick(row);
     });
 
-    // Add description and enum
+    // Add description, enum, json keys
     const desc = (COL_DESCS[table.name] || {})[colName] || '';
     if (desc) row.dataset.desc = desc;
     const enums = (ENUM_VALS[table.name] || {})[colName];
     if (enums) row.dataset.enum = enums.join(' · ');
+    const jsonKeys = (JSON_KEYS[table.name] || {})[colName];
+    if (jsonKeys) row.dataset.jsonKeys = jsonKeys.join(',');
 
     // Badges
     if (isPK) {
@@ -3590,6 +3634,12 @@ function buildTableCard(table) {
       const b = document.createElement('span');
       b.className = 'badge fk';
       b.textContent = 'FK';
+      row.appendChild(b);
+    }
+    if (colType === 'json') {
+      const b = document.createElement('span');
+      b.className = 'badge json' + (jsonKeys ? ' has-keys' : '');
+      b.textContent = '{ }';
       row.appendChild(b);
     }
 
@@ -4102,6 +4152,7 @@ document.addEventListener('mouseout', (evt) => {
 function handleColHover(row, evt) {
   const desc = row.dataset.desc || '';
   const enums = row.dataset.enum || '';
+  const jsonKeysRaw = row.dataset.jsonKeys || '';
   const isPk = row.classList.contains('pk-row');
   const colName = row.dataset.srcCol || (row.id ? row.id.replace(/^col-[^-]+-/, '') : '');
   const tableName = row.dataset.srcTable || '';
@@ -4112,11 +4163,16 @@ function handleColHover(row, evt) {
     pkAlias = tableName.replace(/_ro$/, '') + '_id';
   }
 
-  if (!desc && !enums && !pkAlias) return;
+  if (!desc && !enums && !pkAlias && !jsonKeysRaw) return;
   let html = '';
   if (colName) html += `<div class="tt-col">${colName}</div>`;
   if (pkAlias) html += `<div class="tt-item">FK 참조 시: <span style="color:#f9e2af;font-weight:600">${pkAlias}</span></div>`;
   if (desc)  html += `<div class="tt-desc">${desc}</div>`;
+  if (jsonKeysRaw) {
+    const keys = jsonKeysRaw.split(',');
+    html += `<div class="tt-section">JSON 주요 키 (${keys.length})</div>`;
+    html += `<div class="tt-json-keys">${keys.map(k => `<span class="tt-json-key">${k}</span>`).join('')}</div>`;
+  }
   if (enums) html += `<div class="tt-section">가능한 값</div><div class="tt-enums">${enums}</div>`;
   if (html) showTooltip(html, evt);
 }
