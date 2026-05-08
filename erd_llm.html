@@ -4669,6 +4669,84 @@ WITH payment AS (
 )
 \`\`\`
 
+## 장바구니 분석 레퍼런스 쿼리 (cart 관련 요건 시 이 패턴 참고)
+\`\`\`sql
+-- 상품명/옵션명 포함 장바구니 현황 분석
+WITH base AS (
+  SELECT _id, i18n, items, options
+  FROM ods_commerce_production.product_ro
+),
+product_nm AS (
+  SELECT
+      b._id AS product_id,
+      max(json_extract_scalar(elem, '$.text')) AS product_nm
+  FROM base b
+  CROSS JOIN UNNEST(b.i18n) AS t(elem)
+  WHERE json_extract_scalar(elem, '$.type') = 'KO'
+    AND json_extract_scalar(elem, '$.property') = 'name'
+  GROUP BY 1
+),
+option_item_map AS (
+  SELECT
+      b._id AS product_id,
+      map_agg(
+        json_extract_scalar(opt_item, '$.id'),
+        json_extract_scalar(opt_item, '$.value')
+      ) AS opt_map
+  FROM base b
+  CROSS JOIN UNNEST(b.options) AS t2(opt_str)
+  CROSS JOIN UNNEST(
+    CAST(json_extract(json_parse(opt_str), '$.productOptionItems') AS ARRAY(JSON))
+  ) AS t3(opt_item)
+  GROUP BY 1
+),
+prd_base AS (
+  SELECT
+      b._id AS product_id,
+      n.product_nm,
+      json_extract_scalar(json_parse(item_str), '$._id') AS item_id,
+      element_at(
+        m.opt_map,
+        TRY(json_extract_scalar(json_parse(item_str), '$.optionItemIds[0]'))
+      ) AS option_item_nm
+  FROM base b
+  CROSS JOIN UNNEST(b.items) AS t(item_str)
+  LEFT JOIN product_nm n ON b._id = n.product_id
+  LEFT JOIN option_item_map m ON b._id = m.product_id
+),
+cart AS (
+  SELECT
+      a.user_id,
+      b.product_id,
+      d.product_nm,
+      b.product_item_id,
+      d.option_item_nm,
+      sum(b.quantity) AS quantity
+  FROM ods_commerce_production.cart_ro a
+  LEFT JOIN ods_commerce_production.cart_line_ro b ON a.id = b.cart_id
+  LEFT JOIN ods_commerce_production.cart_line_item_ro c ON b.id = c.cart_line_id
+  LEFT JOIN prd_base d
+    ON cast(b.product_item_id AS varchar) = d.item_id AND b.product_id = d.product_id
+  GROUP BY a.user_id, b.product_id, d.product_nm, b.product_item_id, d.option_item_nm
+)
+SELECT
+    a.product_id,
+    a.product_nm,
+    a.product_item_id,
+    a.option_item_nm,
+    count(distinct a.user_id) AS cart_user_cnt,
+    count(distinct b.user_id) AS buy_user_cnt
+FROM cart a
+LEFT JOIN (
+  SELECT DISTINCT user_id, product_id, product_item_id
+  FROM ods_commerce_production.order_line_ro
+  WHERE status NOT IN ('FAILED') AND canceled_at IS NULL
+) b ON a.user_id = b.user_id
+    AND a.product_id = b.product_id
+    AND a.product_item_id = b.product_item_id
+GROUP BY 1,2,3,4;
+\`\`\`
+
 ## SQLite TEST 규칙
 - 테이블명에서 ods_commerce_production. 접두어 제거
 - AT TIME ZONE, date_parse, date_add 등 Presto 전용 함수 제거 또는 SQLite 동치로 변환
