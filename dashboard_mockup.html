@@ -310,7 +310,7 @@ tr:hover td { background: #fafbff; }
     </div>
 
     <div class="subp on" id="ar-list">
-      <div class="section-header"><div class="sec-title" style="margin:0">전체 아티스트 실적 <span class="sec-sub">— 전체 24개</span></div><button class="f-download" onclick="openModal()">⬇ 엑셀다운로드</button></div>
+      <div class="section-header"><div class="sec-title" style="margin:0">전체 아티스트 실적 <span class="sec-sub">— 전체 12개</span></div><button class="f-download" onclick="openModal()">⬇ 엑셀다운로드</button></div>
       <div class="tbl-wrap">
         <table id="artistTable">
           <thead><tr>
@@ -442,7 +442,7 @@ tr:hover td { background: #fafbff; }
     <div class="mf"><label>기간 단위</label><select id="dlUnit" onchange="estRows()"><option>일간</option><option>주간</option><option>월간</option></select></div>
     <div class="mf"><label>국가/대상</label><select><option>전체</option><option>선택</option></select></div>
     <div class="m-estimate" id="estTxt">📊 예상 데이터: 약 8,400행</div>
-    <div class="note" style="margin:0">· 파일명: 비파센커머스_SM_국가별_20260526-20260602_일간_20260610.xlsx<br>· 시트: daily_summary / weekly_summary / monthly_summary · 최대 10만행(초과 시 차단), 최대 92일</div>
+    <div class="note" style="margin:0">· 파일명: 비파센커머스_SM_국가별_20260526-20260602_일간_20260610.xlsx<br>· 시트: daily_summary / weekly_summary / monthly_summary · 최대 10만행(초과 시 차단), 최대 1년</div>
     <div class="mbtns"><button class="mc" onclick="closeModal()">취소</button><button class="mok" onclick="closeModal()">다운로드</button></div>
   </div>
 </div>
@@ -611,7 +611,7 @@ let sortCol=2,sortDir=-1;
 function sortArtist(c){if(sortCol===c)sortDir*=-1;else{sortCol=c;sortDir=-1;}const idx={2:2,3:5,4:6,5:7,6:8,9:9}[c];artists.sort((a,b)=>(a[idx]-b[idx])*sortDir);renderArtist();}
 function renderArtist(){const data=[...artists,...artistsEx];const cmpOn=document.getElementById('cmpBtn2')?.classList.contains('active');
  document.getElementById('artistBody').innerHTML=data.map((a,i)=>{const cmpVal=Math.round(a[2]/(1+a[3]/100));return `<tr><td>${i+1}</td><td><div class="aname"><div class="av">img</div>${a[1]}</div></td><td>${a[2].toLocaleString()}</td>${cmpOn?`<td style="display:table-cell"><div>${cmpVal.toLocaleString()}</div><div class="${a[3]>0?'up':'dn'}" style="font-size:11px">${a[3]>0?'▲':'▼'} ${Math.abs(a[3])}%</div></td>`:'<td style="display:none"></td>'}<td>${a[5].toLocaleString()}</td><td>${a[6].toLocaleString()}</td><td>${a[7].toLocaleString()}</td><td>${a[8].toLocaleString()}</td><td>${a[10]}</td><td>${a[11].toLocaleString()}</td><td>${a[9]}%</td><td><div class="spark">${a[12].map(h=>`<span style="height:${h}%"></span>`).join('')}</div></td></tr>`;}).join('')
- +`<tr class="total-row"><td></td><td>전체 24개 합산</td><td>249,769,000</td>${cmpOn?'<td style="display:table-cell"><div>222,500,000</div><div class="up" style="font-size:11px">▲ 12.3%</div></td>':'<td style="display:none"></td>'}<td>221,300,000</td><td>48,302</td><td>31,540</td><td>218,000</td><td>1.53</td><td>75,400</td><td>14.5%</td><td></td></tr>`;}
+ +`<tr class="total-row"><td></td><td>전체 12개 합산</td><td>249,769,000</td>${cmpOn?'<td style="display:table-cell"><div>222,500,000</div><div class="up" style="font-size:11px">▲ 12.3%</div></td>':'<td style="display:none"></td>'}<td>221,300,000</td><td>48,302</td><td>31,540</td><td>218,000</td><td>1.53</td><td>75,400</td><td>14.5%</td><td></td></tr>`;}
 
 // 아티스트 비교분석
 const allArtists=['EXO','aespa','NCT 127','SHINee','Red Velvet','RIIZE'];
