@@ -233,13 +233,13 @@ tr:hover td { background: #fafbff; }
       <button class="fbtn" onclick="pickPeriod(this)">어제</button>
       <button class="fbtn active" onclick="pickPeriod(this)">최근7일</button>
       <button class="fbtn" onclick="pickPeriod(this)">이번달</button>
-      <select class="fsel" id="ovGran" onchange="drawTrend()"><option>일간</option><option>주간</option><option>월간</option></select>
+      <select class="fsel" id="ovGran"><option>일간</option><option>주간</option><option>월간</option></select>
       <div class="fdate"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg><span id="ovDS">2026.06.03</span></div>
       <span class="tilde">~</span>
       <div class="fdate"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg><span id="ovDE">2026.06.10</span></div>
       <button class="fbtn" id="cmpBtn" onclick="toggleCmp()">비교</button>
       <div class="compare-fields" id="cmpFields"><span class="tag">비교</span><div class="fdate">2026.05.27</div><span class="tilde">~</span><div class="fdate">2026.06.02</div></div>
-      <div class="f-right"><button class="f-query">조회</button><button class="f-download" onclick="openModal()">⬇ 엑셀다운로드</button></div>
+      <div class="f-right"><button class="f-query" onclick="applyOvQuery()">조회</button><button class="f-download" onclick="openModal()">⬇ 엑셀다운로드</button></div>
     </div>
     <div id="prodIdArea" class="prodid-area">
       <span class="pid-label">상품ID</span>
@@ -480,11 +480,15 @@ function coSub(s,el){document.querySelectorAll('#tab-country .inner-tab').forEac
 
 // ----- 오늘 모드 -----
 let isToday=false,isCompare=false;
-function pickPeriod(b){const bar=b.closest('.filterbar');bar.querySelectorAll('.fbtn:not([id^=cmpBtn])').forEach(x=>{x.classList.remove('active','today-active');});const today=b.textContent==='오늘';b.classList.add(today?'today-active':'active');if(bar.closest('#tab-overview')){ovPeriod=b.textContent;setTodayMode(today);}}
-function setTodayMode(today){isToday=today;const pid=document.getElementById('prodIdArea'),cmp=document.getElementById('cmpBtn'),gran=document.getElementById('ovGran');
-  if(today){pid.style.display='flex';if(isCompare)toggleCmp();cmp.disabled=true;gran.disabled=true;}
-  else{pid.style.display='none';cmp.disabled=false;gran.disabled=false;}
-  drawTrend();}
+let ovPending='최근7일', appliedGran='일간';
+function pickPeriod(b){const bar=b.closest('.filterbar');bar.querySelectorAll('.fbtn:not([id^=cmpBtn])').forEach(x=>{x.classList.remove('active','today-active');});const today=b.textContent==='오늘';b.classList.add(today?'today-active':'active');if(bar.closest('#tab-overview')){ovPending=b.textContent;setTodayUI(today);}}
+// 오늘 선택 시 입력 UI 즉시 토글(상품ID/비교/단위) — 단, 차트/날짜는 '조회' 클릭 시 적용
+function setTodayUI(today){const pid=document.getElementById('prodIdArea'),cmp=document.getElementById('cmpBtn'),gran=document.getElementById('ovGran');
+  pid.style.display=today?'flex':'none'; cmp.disabled=today; gran.disabled=today;
+  if(today&&isCompare){isCompare=false;document.getElementById('cmpFields').classList.remove('on');cmp.classList.remove('active');document.getElementById('cmpKpiWrap').classList.remove('on');document.getElementById('cmpLegend').style.display='none';document.querySelectorAll('#kpiGrid .kpi-delta').forEach(d=>d.classList.remove('show'));}
+}
+// 조회 버튼 클릭 시에만 확정 적용
+function applyOvQuery(){ovPeriod=ovPending; appliedGran=document.getElementById('ovGran').value; isToday=(ovPending==='오늘'); drawTrend();}
 function toggleCmp(){if(document.getElementById('cmpBtn').disabled)return;isCompare=!isCompare;document.getElementById('cmpFields').classList.toggle('on',isCompare);document.getElementById('cmpBtn').classList.toggle('active',isCompare);document.getElementById('cmpKpiWrap').classList.toggle('on',isCompare);document.getElementById('cmpLegend').style.display=isCompare?'flex':'none';document.querySelectorAll('#kpiGrid .kpi-delta').forEach(d=>d.classList.toggle('show',isCompare));drawTrend();}
 function toggleCmp2(b){const on=b.classList.toggle('active');document.getElementById('cmpFields2').classList.toggle('on',on);document.getElementById('diffHead').style.display=on?'table-cell':'none';renderArtist();}
 function basisToggle(s){s.parentElement.querySelectorAll('span').forEach(x=>x.classList.remove('on'));s.classList.add('on');}
@@ -584,7 +588,7 @@ function dailyRange(){
 }
 function drawTrend(){
  trendCharts.forEach(c=>c.destroy());trendCharts=[];
- const gran=(document.getElementById('ovGran')||{}).value||'일간';
+ const gran=appliedGran;
  let labels, getData, title;
  if(isToday){ labels=hours; getData=k=>k.hourly; title='지표별 당일 시간대별 추이'; }
  else if(gran==='주간'){ labels=WEEKLY_LBL; getData=k=>k.weekly; title='지표별 추이 (주간)'; }
