@@ -233,12 +233,12 @@ tr:hover td { background: #fafbff; }
       <button class="fbtn" onclick="pickPeriod(this)">어제</button>
       <button class="fbtn active" onclick="pickPeriod(this)">최근7일</button>
       <button class="fbtn" onclick="pickPeriod(this)">이번달</button>
-      <select class="fsel" id="ovGran"><option>일간</option><option>주간</option><option>월간</option></select>
-      <div class="fdate"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg>2026.05.26</div>
+      <select class="fsel" id="ovGran" onchange="drawTrend()"><option>일간</option><option>주간</option><option>월간</option></select>
+      <div class="fdate"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg>2026.06.03</div>
       <span class="tilde">~</span>
-      <div class="fdate"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg>2026.06.02</div>
+      <div class="fdate"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg>2026.06.09</div>
       <button class="fbtn" id="cmpBtn" onclick="toggleCmp()">비교</button>
-      <div class="compare-fields" id="cmpFields"><span class="tag">비교</span><div class="fdate">2026.05.19</div><span class="tilde">~</span><div class="fdate">2026.05.25</div></div>
+      <div class="compare-fields" id="cmpFields"><span class="tag">비교</span><div class="fdate">2026.05.27</div><span class="tilde">~</span><div class="fdate">2026.06.02</div></div>
       <div class="f-right"><button class="f-query">조회</button><button class="f-download" onclick="openModal()">⬇ 엑셀다운로드</button></div>
     </div>
     <div id="prodIdArea" class="prodid-area">
@@ -248,11 +248,11 @@ tr:hover td { background: #fafbff; }
       <div class="pid-tags" id="pidTags"></div>
       <span class="pid-hint" id="pidHint">최대 5개까지 입력 가능</span>
     </div>
-    <div class="update-txt">최근 업데이트: 2026.05.28 10:05 KST 기준 (배치) · '오늘' 조회 시 실시간(2시간 전까지)</div>
+    <div class="update-txt">최근 업데이트: 2026.06.10 10:05 KST 기준 (배치) · '오늘' 조회 시 실시간(2시간 전까지)</div>
 
     <!-- 매출지표 -->
     <div class="subp on" id="ov-sales">
-      <div class="sec-title"><span class="date">2026-06-02</span> 매출 지표 <span class="info" title="조회기간 합산 값">i</span></div>
+      <div class="sec-title"><span class="date">2026-06-09</span> 매출 지표 <span class="info" title="조회기간 합산 값">i</span></div>
       <div class="kpi-grid" id="kpiGrid"></div>
       <div class="cmp-kpi-wrap" id="cmpKpiWrap"><div class="cmp-kpi-grid" id="cmpKpiGrid"><span class="cmp-kpi-label">비교</span></div></div>
 
@@ -537,22 +537,37 @@ function renderPid2(){document.getElementById('pid2Tags').innerHTML=pid2List.map
  else{h.textContent='상품ID 입력 시 프로젝트·아티스트·현장수령 필터는 비활성화됩니다 (최대 5개)';h.style.color='#6b9e7e';}}
 
 // ========== 데이터 ==========
-const days=['5/26','5/27','5/28','5/29','5/30','5/31','6/1','6/2'];
 const hours=['00시','03시','06시','09시','12시','15시','18시','21시'];
+// granularity별 X축 라벨
+const DAILY_LBL=['6/1','6/2','6/3','6/4','6/5','6/6','6/7','6/8','6/9'];           // 이번달/일간: 6/1~6/9
+const WEEKLY_LBL=['6/1~6/7','6/8~6/14','6/15~6/21'];                                // 주간: 6/1~6/21
+const MONTHLY_LBL=['2026-01','2026-02','2026-03','2026-04','2026-05'];              // 월간: 1~5월
 const BLUE='#4263eb',GRAY='#cbd0da';
 // 색상 팔레트 (아티스트 비교)
 const PAL=['#4263EB','#F03E5E','#20C997','#FBBF24','#A855F7','#FF922B','#15AABF','#E64980','#82C91E','#7048E8','#1098AD','#F76707'];
 // 국가 고정색
 const CTRY_COLOR={'대한민국':'#4263EB','대만':'#F03E5E','일본':'#FBBF24','중국':'#20C997','미국':'#A855F7','홍콩':'#FF922B','기타':'#CBD0DA'};
 
-// KPI
+// KPI (daily=6/1~6/9 9포인트 / weekly=3주 / monthly=1~5월 5포인트, ratio=비율지표)
 const KPI=[
- {name:'총 결제거래액',val:'249.8',unit:'백만원',d:'+14.8',up:1,cmp:'217.5백만원',daily:[186,212,198,235,222,258,240,250],cmpd:[162,185,172,208,198,228,215,220],hourly:[8,5,3,12,28,35,42,30],yf:v=>v+'M'},
- {name:'순 결제거래액',val:'221.3',unit:'백만원',d:'+14.8',up:1,cmp:'192.8백만원',daily:[165,188,176,208,197,229,213,221],cmpd:[143,164,152,184,175,202,190,195],hourly:[7,4,3,11,25,31,37,27],yf:v=>v+'M'},
- {name:'주문건수',val:'48,302',unit:'건',d:'+14.8',up:1,cmp:'42,100건',daily:[4200,5100,4800,5900,5500,6400,6000,6200],cmpd:[3700,4500,4200,5200,4900,5700,5300,5500],hourly:[120,80,60,320,820,1040,1280,640],yf:v=>v>=1000?(v/1000).toFixed(1)+'K':v},
- {name:'구매고객수',val:'31,540',unit:'명',d:'-23.0',up:0,cmp:'40,960명',daily:[2800,3400,3200,3900,3600,4200,4000,4100],cmpd:[3500,4100,3900,4800,4400,5100,4800,4960],hourly:[90,60,45,240,560,720,860,420],yf:v=>v>=1000?(v/1000).toFixed(1)+'K':v},
- {name:'방문자수(UV)',val:'218,000',unit:'명',d:'-23.0',up:0,cmp:'283,800명',daily:[28,33,31,38,35,41,39,40],cmpd:[36,42,40,48,44,51,48,49],hourly:[1.2,0.8,0.6,3.2,5.6,7.2,8.6,4.2],yf:v=>v+'K'},
- {name:'구매전환율',val:'14.5',unit:'%',d:'+14.8',up:1,cmp:'12.6%',daily:[13.2,14.8,13.9,15.2,14.5,15.8,15.3,14.5],cmpd:[11.5,12.8,12.1,13.2,12.6,13.8,13.3,12.6],hourly:[7.5,7.0,7.3,8.1,9.5,10.2,11.1,9.5],yf:v=>v.toFixed(0)+'%'}
+ {name:'총 결제거래액',val:'249.8',unit:'백만원',d:'+14.8',up:1,cmp:'217.5백만원',ratio:false,
+  daily:[180,205,198,222,235,228,255,242,250], weekly:[1320,1480,1610], monthly:[5200,5800,6100,6400,6800],
+  hourly:[8,5,3,12,28,35,42,30],yf:v=>v+'M'},
+ {name:'순 결제거래액',val:'221.3',unit:'백만원',d:'+14.8',up:1,cmp:'192.8백만원',ratio:false,
+  daily:[158,182,176,197,208,202,226,214,221], weekly:[1170,1310,1430], monthly:[4600,5100,5400,5700,6050],
+  hourly:[7,4,3,11,25,31,37,27],yf:v=>v+'M'},
+ {name:'주문건수',val:'48,302',unit:'건',d:'+14.8',up:1,cmp:'42,100건',ratio:false,
+  daily:[4200,5100,4800,5500,5900,5700,6400,6000,6200], weekly:[33800,37500,40200], monthly:[135000,148000,156000,162000,170000],
+  hourly:[120,80,60,320,820,1040,1280,640],yf:v=>v>=1000?(v/1000).toFixed(1)+'K':v},
+ {name:'구매고객수',val:'31,540',unit:'명',d:'-23.0',up:0,cmp:'40,960명',ratio:false,
+  daily:[2800,3400,3200,3600,3900,3700,4200,4000,4100], weekly:[22300,24800,26500], monthly:[88000,96000,102000,108000,114000],
+  hourly:[90,60,45,240,560,720,860,420],yf:v=>v>=1000?(v/1000).toFixed(1)+'K':v},
+ {name:'방문자수(UV)',val:'218,000',unit:'명',d:'-23.0',up:0,cmp:'283,800명',ratio:false,
+  daily:[28,33,31,35,38,36,41,39,40], weekly:[196,225,245], monthly:[820,910,980,1040,1100],
+  hourly:[1.2,0.8,0.6,3.2,5.6,7.2,8.6,4.2],yf:v=>v+'K'},
+ {name:'구매전환율',val:'14.5',unit:'%',d:'+14.8',up:1,cmp:'12.6%',ratio:true,
+  daily:[13.2,14.8,13.9,14.5,15.2,14.3,15.8,15.3,14.5], weekly:[14.1,14.6,15.0], monthly:[13.8,14.2,14.6,14.9,15.2],
+  hourly:[7.5,7.0,7.3,8.1,9.5,10.2,11.1,9.5],yf:v=>v.toFixed(0)+'%'}
 ];
 function renderKpi(){
  document.getElementById('kpiGrid').innerHTML=KPI.map(k=>`<div class="kpi-card" style="cursor:default"><div class="kpi-name">${k.name}</div><div class="kpi-val">${k.val}<span class="unit">${k.unit}</span></div><div class="kpi-delta ${k.up?'up':'dn'}${isCompare?' show':''}">${k.up?'▲':'▼'} ${Math.abs(parseFloat(k.d))}%</div></div>`).join('');
@@ -562,13 +577,18 @@ function renderKpi(){
 let trendCharts=[];
 function drawTrend(){
  trendCharts.forEach(c=>c.destroy());trendCharts=[];
- document.getElementById('trendSecTitle').innerHTML=(isToday?'지표별 당일 시간대별 추이':'지표별 추이')+' <span class="info" title="6개 지표 시계열">i</span>';
+ const gran=(document.getElementById('ovGran')||{}).value||'일간';
+ const labelMap={'일간':DAILY_LBL,'주간':WEEKLY_LBL,'월간':MONTHLY_LBL};
+ const keyMap={'일간':'daily','주간':'weekly','월간':'monthly'};
+ const labels=isToday?hours:labelMap[gran];
+ const dataKey=keyMap[gran];
+ document.getElementById('trendSecTitle').innerHTML=(isToday?'지표별 당일 시간대별 추이':('지표별 추이 ('+gran+')'))+' <span class="info" title="6개 지표 시계열">i</span>';
  const grid=document.getElementById('trendGrid');
  grid.innerHTML=KPI.map((k,i)=>`<div class="trend-card"><div class="t-head"><span class="t-name">${k.name}</span><span><span class="t-val">${k.val}${k.unit==='%'?'%':''}</span><span class="t-delta ${k.up?'up':'dn'}" style="${isCompare?'':'display:none'}">${k.up?'▲':'▼'}${Math.abs(parseFloat(k.d))}%</span></span></div><div class="trend-chart"><canvas id="tc${i}"></canvas></div></div>`).join('');
- const labels=isToday?hours:days;
  KPI.forEach((k,i)=>{
-  const ds=[{label:'조회기간',data:isToday?k.hourly:k.daily,borderColor:BLUE,backgroundColor:isToday?'rgba(66,99,235,.7)':'rgba(66,99,235,.07)',fill:!isToday,tension:.4,pointRadius:isToday?0:2,borderRadius:isToday?3:0}];
-  if(isCompare&&!isToday)ds.push({label:'비교기간',data:k.cmpd,borderColor:GRAY,borderDash:[4,3],backgroundColor:'transparent',tension:.4,pointRadius:2});
+  const base=isToday?k.hourly:k[dataKey];
+  const ds=[{label:'조회기간',data:base,borderColor:BLUE,backgroundColor:isToday?'rgba(66,99,235,.7)':'rgba(66,99,235,.07)',fill:!isToday,tension:.4,pointRadius:isToday?0:2,borderRadius:isToday?3:0}];
+  if(isCompare&&!isToday){const cmp=base.map(v=>k.ratio?+(v*0.92).toFixed(1):Math.round(v*0.88));ds.push({label:'비교기간',data:cmp,borderColor:GRAY,borderDash:[4,3],backgroundColor:'transparent',tension:.4,pointRadius:2});}
   const ch=new Chart(document.getElementById('tc'+i),{type:isToday?'bar':'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+(k.unit==='%'?c.parsed.y+'%':c.parsed.y.toLocaleString()+(k.unit==='백만원'?'백만원':k.unit==='K'?'K':''))}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa'}},y:{grid:{color:'#f1f3f6'},ticks:{font:{size:9},color:'#aaa',callback:k.yf}}}}});
   trendCharts.push(ch);
  });
