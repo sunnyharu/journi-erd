@@ -239,7 +239,7 @@ tr:hover td { background: #fafbff; }
       <div class="fdate"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg><span id="ovDE">2026.06.10</span></div>
       <button class="fbtn" id="cmpBtn" onclick="toggleCmp()">비교</button>
       <div class="compare-fields" id="cmpFields"><span class="tag">비교</span><div class="fdate">2026.05.27</div><span class="tilde">~</span><div class="fdate">2026.06.02</div></div>
-      <div class="f-right"><button class="f-query" onclick="applyOvQuery()">조회</button><button class="f-download" onclick="openModal()">⬇ 엑셀다운로드</button></div>
+      <div class="f-right"><button class="f-query" onclick="applyOvQuery()">조회</button><button class="f-download" onclick="openModal('overview_sales')">⬇ 엑셀다운로드</button></div>
     </div>
     <div id="prodIdArea" class="prodid-area">
       <span class="pid-label">상품ID</span>
@@ -272,7 +272,7 @@ tr:hover td { background: #fafbff; }
         <div class="sec-title" style="margin:0">고객지표 Summary <span class="info" title="연간 누적 구매고객 추이 및 아티스트별 누적 고객 분포">i</span></div>
         <div style="display:flex;gap:8px;align-items:center">
           <select class="fsel" style="height:32px"><option>2025년</option><option selected>2026년</option><option>2027년</option></select>
-          <button class="f-download" onclick="openModal()">⬇ 엑셀다운로드</button>
+          <button class="f-download" onclick="openModal('overview_customer')">⬇ 엑셀다운로드</button>
         </div>
       </div>
 
@@ -311,7 +311,7 @@ tr:hover td { background: #fafbff; }
     </div>
 
     <div class="subp on" id="ar-list">
-      <div class="section-header"><div class="sec-title" style="margin:0">전체 아티스트 실적 <span class="sec-sub">— 전체 12개</span></div><button class="f-download" onclick="openModal()">⬇ 엑셀다운로드</button></div>
+      <div class="section-header"><div class="sec-title" style="margin:0">전체 아티스트 실적 <span class="sec-sub">— 전체 12개</span></div><button class="f-download" onclick="openModal('artist')">⬇ 엑셀다운로드</button></div>
       <div class="tbl-wrap">
         <table id="artistTable">
           <thead><tr>
@@ -378,7 +378,7 @@ tr:hover td { background: #fafbff; }
         <div class="pid-tags" id="pid2Tags"></div>
         <span class="pid-hint" id="pid2Hint">상품ID 입력 시 프로젝트·아티스트·현장수령 필터는 비활성화됩니다 (최대 5개)</span>
       </div>
-      <div class="section-header"><div class="sec-title" style="margin:0">상품(프로젝트)별 상세 지표 <span class="sec-sub">2026.05.26 ~ 06.02 합계</span></div><button class="f-download" onclick="openModal()">⬇ 엑셀다운로드</button></div>
+      <div class="section-header"><div class="sec-title" style="margin:0">상품(프로젝트)별 상세 지표 <span class="sec-sub">2026.05.26 ~ 06.02 합계</span></div><button class="f-download" onclick="openModal('product_detail')">⬇ 엑셀다운로드</button></div>
       <div class="tbl-wrap">
         <table>
           <thead><tr><th class="noselect">조회기간</th><th class="noselect">프로젝트명</th><th class="noselect">아티스트</th><th class="noselect">상품ID</th><th class="noselect">상품명</th><th>총 결제거래액</th><th>순 결제거래액</th><th>구매수량</th><th>구매고객수</th><th>UV</th><th class="noselect">인당구매수</th><th>구매전환율</th></tr></thead>
@@ -428,7 +428,7 @@ tr:hover td { background: #fafbff; }
       <div class="dl-info">
         <div class="big">국가별 상세 데이터는 엑셀 다운로드로 제공됩니다</div>
         <div>화면은 Overview(국가 분포 요약)만 제공하며,<br>국가 × 기간(일/주/월) × 전체 지표 상세는 엑셀로 받아보실 수 있습니다.</div>
-        <div style="margin-top:16px;display:flex;justify-content:center"><button class="f-download" onclick="openModal()">⬇ 엑셀다운로드</button></div>
+        <div style="margin-top:16px;display:flex;justify-content:center"><button class="f-download" onclick="openModal('country_detail')">⬇ 엑셀다운로드</button></div>
       </div>
     </div>
   </div>
@@ -439,11 +439,9 @@ tr:hover td { background: #fafbff; }
 <!-- modal -->
 <div class="overlay" id="xl">
   <div class="modal">
-    <div class="modal-t">⬇ 엑셀 다운로드</div>
-    <div class="mf"><label>기간 단위</label><select id="dlUnit" onchange="estRows()"><option>일간</option><option>주간</option><option>월간</option></select></div>
-    <div class="mf"><label>국가/대상</label><select><option>전체</option><option>선택</option></select></div>
+    <div class="modal-t">⬇ 엑셀 다운로드 <span id="dlMenuName" style="font-size:12px;font-weight:400;color:#8b909c"></span></div>
     <div class="m-estimate" id="estTxt">📊 예상 데이터: 약 8,400행</div>
-    <div class="note" style="margin:0">· 파일명: 비파센커머스_SM_국가별_20260526-20260602_일간_20260610.xlsx<br>· 시트: daily_summary / weekly_summary / monthly_summary · 최대 10만행(초과 시 차단), 최대 1년</div>
+    <div class="note" id="dlMeta" style="margin:0;line-height:1.7"></div>
     <div class="mbtns"><button class="mc" onclick="closeModal()">취소</button><button class="mok" onclick="closeModal()">다운로드</button></div>
   </div>
 </div>
@@ -492,10 +490,59 @@ function applyOvQuery(){ovPeriod=ovPending; appliedGran=document.getElementById(
 function toggleCmp(){if(document.getElementById('cmpBtn').disabled)return;isCompare=!isCompare;document.getElementById('cmpFields').classList.toggle('on',isCompare);document.getElementById('cmpBtn').classList.toggle('active',isCompare);document.getElementById('cmpKpiWrap').classList.toggle('on',isCompare);document.getElementById('cmpLegend').style.display=isCompare?'flex':'none';document.querySelectorAll('#kpiGrid .kpi-delta').forEach(d=>d.classList.toggle('show',isCompare));drawTrend();}
 function toggleCmp2(b){const on=b.classList.toggle('active');document.getElementById('cmpFields2').classList.toggle('on',on);document.getElementById('diffHead').style.display=on?'table-cell':'none';renderArtist();}
 function basisToggle(s){s.parentElement.querySelectorAll('span').forEach(x=>x.classList.remove('on'));s.classList.add('on');}
-function openModal(){document.getElementById('xl').classList.add('on');estRows();}
+// ── 엑셀 다운로드 (v1.4: 메뉴코드 기반 파일명/시트명) ──
+const XL_MENU={
+ overview_sales:{name:'Overview·매출지표',code:'overview_sales'},
+ overview_customer:{name:'Overview·고객지표',code:'overview_customer',customer:true},
+ artist:{name:'아티스트별',code:'artist'},
+ product_detail:{name:'상품(프로젝트) 상세',code:'product_detail'},
+ country_detail:{name:'국가별 상세',code:'country_detail'}
+};
+let curXlMenu='overview_sales';
+const UNIT_KO={hourly:'시간대별(오늘)',daily:'일간',weekly:'주간',monthly:'월간'};
+function openModal(menu){curXlMenu=XL_MENU[menu]?menu:'overview_sales';document.getElementById('xl').classList.add('on');updModal();}
 function closeModal(){document.getElementById('xl').classList.remove('on');}
 document.getElementById('xl').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
-function estRows(){const u=document.getElementById('dlUnit').value;const m={'일간':8400,'주간':1200,'월간':280}[u];document.getElementById('estTxt').textContent='📊 예상 데이터: 약 '+m.toLocaleString()+'행';}
+function granSheet(g){return {'일간':'daily','주간':'weekly','월간':'monthly'}[g]||'daily';}
+// 엑셀 단위는 모달에서 재선택하지 않고, 각 탭에 '현재 적용된 조회 조건'을 그대로 따라감
+function curUnit(menu){
+ if(menu==='overview_customer') return 'monthly';                 // 고객지표: 연도 기준 월 누적
+ if(menu==='overview_sales') return isToday?'hourly':granSheet(appliedGran);
+ if(menu==='product_detail'){
+  if(document.querySelector('#tab-product .filterbar .today-active')) return 'hourly';
+  return granSheet(document.getElementById('prGran').value);
+ }
+ if(menu==='artist'){const s=document.querySelector('#tab-artist .filterbar .fsel');return granSheet(s?s.value:'일간');}
+ if(menu==='country_detail') return granSheet(document.getElementById('coGran').value);
+ return 'daily';
+}
+function updModal(){
+ const m=XL_MENU[curXlMenu];
+ const ts='20260610133411';            // 다운로드일시 YYYYMMDDHHMMSS
+ const unit=curUnit(curXlMenu);        // 현재 조회 조건 기준 (모달 재선택 없음)
+ document.getElementById('dlMenuName').textContent='· '+m.name;
+ let sheets;
+ if(m.customer){
+  sheets='customer_kpi_monthly / customer_cumulative_monthly / customer_new_monthly';
+  document.getElementById('estTxt').textContent='📊 예상 데이터: 연도(월 누적) · 지표×월 / 아티스트×월';
+ }else{
+  sheets=m.code+'_'+unit;
+  const est={hourly:24,daily:8400,weekly:1200,monthly:280}[unit]||8400;
+  document.getElementById('estTxt').textContent='📊 예상 데이터: 약 '+est.toLocaleString()+'행';
+ }
+ const fname='비파센커머스_SM_'+m.code+'_'+unit+'_'+ts+'.xlsx';
+ const unitLine=m.customer?'월 누적(연도 기준)':UNIT_KO[unit]+' ('+unit+')';
+ const ipNote=m.customer?'':'<br>· 인당 지표(인당거래액·인당구매수·인당주문상품수) 엑셀 미제공 <span style="color:#8b909c">(구매전환율은 예외)</span>';
+ const subNote=curXlMenu==='product_detail'?'<br>· 화면 소계는 엑셀 미노출 (전체 합계만 노출)':'';
+ document.getElementById('dlMeta').innerHTML=
+  '· 메뉴코드: <b>'+m.code+'</b>'+
+  '<br>· 집계 단위: '+unitLine+' <span style="color:#8b909c">— 현재 조회 조건 기준</span>'+
+  '<br>· 파일명: '+fname+
+  '<br>· 시트명: '+sheets+
+  '<br>· 상단 메타: 파트너 / 메뉴코드 / 집계단위 / 조회기간 / 다운로드일시(KST) / 필터'+
+  '<br>· 최대 10만행(초과 시 차단) · 최대 1년(366일)'+
+  ipNote+subNote;
+}
 
 // ── 상품ID 마스터 (샘플): id → 상품명 ──
 const PROD_NAME={
