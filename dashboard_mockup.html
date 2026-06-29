@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>파트너센터 커머스 대시보드</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background: #f5f6f8; color: #1f2330; font-size: 13px; }
@@ -444,7 +445,7 @@ tr:hover td { background: #fafbff; }
     <div class="modal-t">⬇ 엑셀 다운로드 <span id="dlMenuName" style="font-size:12px;font-weight:400;color:#8b909c"></span></div>
     <div class="m-estimate" id="estTxt">📊 예상 데이터: 약 8,400행</div>
     <div class="note" id="dlMeta" style="margin:0;line-height:1.7"></div>
-    <div class="mbtns"><button class="mc" onclick="closeModal()">취소</button><button class="mok" onclick="closeModal()">다운로드</button></div>
+    <div class="mbtns"><button class="mc" onclick="closeModal()">취소</button><button class="mok" onclick="doDownload()">다운로드</button></div>
   </div>
 </div>
 
@@ -814,6 +815,67 @@ function initCountry(){
  const arpu=[['중국',123567],['미국',100567],['일본',86400],['대한민국',76800],['대만',64200]];
  const rk=(el,d,fmt)=>{const mx=Math.max(...d.map(x=>x[1]));document.getElementById(el).innerHTML=d.map(([n,v],i)=>{const col=CTRY_COLOR[n]||'#CBD0DA';return `<div class="rank-row"><span class="rank-no" style="background:${col}22;color:${col}">${i+1}</span><span class="rank-name">${n}</span><span class="rank-bar"><i style="width:${(v/mx*100).toFixed(0)}%;background:${col}"></i></span><span class="rank-val">${fmt(v)}</span></div>`;}).join('');};
  rk('rankCvr',cvr,v=>v.toFixed(1)+'%');rk('rankArpu',arpu,v=>'₩'+v.toLocaleString());
+}
+
+// ===== 엑셀 실제 다운로드 (SheetJS · v1.4 포맷) =====
+const XL_TITLE={overview_sales:'Overview 매출지표',overview_customer:'Overview 고객지표',artist:'아티스트별 실적',product_detail:'상품(프로젝트) 상세',country_detail:'국가별 상세'};
+const XL_FILTER={overview_sales:'상품ID -',overview_customer:'-',artist:'-',product_detail:'프로젝트 전체 · 아티스트 EXO · 현장수령 전체',country_detail:'국가기준 가입 · 프로젝트 OFFICIAL FANLIGHT · 아티스트 EXO'};
+const UNIT_BASE={hourly:'오늘',daily:'일간',weekly:'주간',monthly:'월간'};
+const UNIT_PERIOD={hourly:'2026.06.10 (시간대별)',daily:'2026.06.03~2026.06.09',weekly:'2026-W22~W24 (2026.06.01~06.21)',monthly:'2026.01~2026.05'};
+function unitPeriods(unit){return {hourly:['2026.06.10 13시','2026.06.10 14시'],daily:['2026.06.03','2026.06.04'],weekly:['2026-W22','2026-W23'],monthly:['2026.01','2026.02']}[unit]||['2026.06.03','2026.06.04'];}
+// 상단 메타(제목 + 메타 행 + 공백)
+function metaRows(menu,unit){const cust=menu==='overview_customer';
+ return [
+  ['['+XL_TITLE[menu]+'] · '+(cust?'월 누적':UNIT_BASE[unit])+' 집계'],
+  ['파트너: SM','메뉴코드: '+XL_MENU[menu].code,'집계단위: '+(cust?'연도(월 누적)':UNIT_BASE[unit]),'조회기간: '+(cust?'2026':UNIT_PERIOD[unit]),'다운로드일시: 2026.06.10 13:34:11 (KST)','필터: '+XL_FILTER[menu]],
+  []
+ ];}
+// 메뉴별 데이터(기획서 샘플 기준)
+function buildAoa(menu,unit){const base=UNIT_BASE[unit],pr=unitPeriods(unit),per=UNIT_PERIOD[unit];let head,rows=[];
+ if(menu==='overview_sales'){
+  head=['기준','조회기간','파트너','총 결제거래액','순 결제거래액','주문건수','주문상품수','구매수량','구매고객수','방문자수(UV)','구매전환율'];
+  rows=[[base,pr[0],'SM',235000000,207975000,5900,9145,10030,3900,38000,'10.3%'],
+        [base,pr[1],'SM',220000000,194700000,5400,8400,9200,3600,36000,'10.0%'],
+        ['합계','','',1398000000,1237230000,35588,55158,60497,31540,218000,'14.5%']];
+ }else if(menu==='artist'){
+  head=['기준','조회기간','순위','아티스트','총 결제거래액','순 결제거래액','주문상품수','구매수량','구매고객수','방문자수(UV)','구매전환율'];
+  const top=[['EXO',342000000,302670000,6840,7524,4500,32400,'13.9%'],['aespa',287000000,253995000,5740,6314,3776,27187,'13.9%'],['NCT 127',231000000,203280000,4910,5400,3200,25600,'12.5%']];
+  top.forEach((a,i)=>rows.push([base,per,i+1,a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7]]));
+  const sum=j=>top.reduce((s,a)=>s+a[j],0);
+  rows.push(['합계','','','',sum(1),sum(2),sum(3),sum(4),sum(5),sum(6),'13.5%']);
+ }else if(menu==='product_detail'){
+  head=['기준','조회기간','프로젝트명','아티스트','현장수령','상품ID','상품명','총 결제거래액','순 결제거래액','주문상품수','구매수량','구매고객수','방문자수(UV)','구매전환율'];
+  rows=[[base,per,'OFFICIAL FANLIGHT','EXO','전체','620132273','EXO 응원봉',406586330,360000000,4999,8120,5240,42000,'12.5%'],
+        [base,per,'The 2nd Album [LEMONADE]','aespa','전체','451314230','LEMONADE (SMini Ver.)',180000000,158000000,1456,3500,2400,18000,'13.3%'],
+        ['합계','','','','','','',586586330,518000000,6455,11620,7640,60000,'13.0%']];
+ }else if(menu==='country_detail'){
+  head=['기준','조회기간','파트너명','국가기준','프로젝트','아티스트','국가','총 결제거래액','순 결제거래액','주문건수','주문상품수','구매수량','구매고객수','방문자수(UV)','구매전환율'];
+  rows=[[base,per,'SM','가입','OFFICIAL FANLIGHT','EXO','대한민국',164868000,145908180,18318,23813,29308,23652,143880,'16.4%'],
+        [base,per,'SM','가입','OFFICIAL FANLIGHT','EXO','일본',24980000,22107300,2775,3608,4440,3583,21800,'16.4%'],
+        ['합계','','','','','','',249800000,221000000,27756,36083,44400,35837,218000,'16.4%']];
+ }
+ return metaRows(menu,unit).concat([head]).concat(rows);
+}
+function doDownload(){
+ if(typeof XLSX==='undefined'){toast('엑셀 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.');return;}
+ const m=XL_MENU[curXlMenu],unit=curUnit(curXlMenu),ts='20260610133411';
+ const wb=XLSX.utils.book_new();
+ if(m.customer){
+  const meta=metaRows('overview_customer','monthly');
+  [['customer_kpi_monthly','지표',kpiMonth.map(r=>[r[0]].concat(r[1]))],
+   ['customer_cumulative_monthly','아티스트',custCum],
+   ['customer_new_monthly','아티스트',custNew]].forEach(([sn,first,data])=>{
+    const head=[first].concat(MONTHS);
+    const body=data.map(r=>{const vals=r.slice(1);return [r[0]].concat(MONTHS.map((_,i)=>vals[i]!=null?vals[i]:0));});
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(meta.concat([head]).concat(body)),sn);
+   });
+ }else{
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildAoa(curXlMenu,unit)),(m.code+'_'+unit).slice(0,31));
+ }
+ const fname='비파센커머스_SM_'+m.code+'_'+unit+'_'+ts+'.xlsx';
+ XLSX.writeFile(wb,fname);
+ toast('엑셀 다운로드: '+fname);
+ closeModal();
 }
 
 // init
