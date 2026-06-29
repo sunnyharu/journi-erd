@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>파트너센터 커머스 대시보드</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background: #f5f6f8; color: #1f2330; font-size: 13px; }
@@ -823,13 +823,31 @@ const XL_FILTER={overview_sales:'상품ID -',overview_customer:'-',artist:'-',pr
 const UNIT_BASE={hourly:'오늘',daily:'일간',weekly:'주간',monthly:'월간'};
 const UNIT_PERIOD={hourly:'2026.06.10 (시간대별)',daily:'2026.06.03~2026.06.09',weekly:'2026-W22~W24 (2026.06.01~06.21)',monthly:'2026.01~2026.05'};
 function unitPeriods(unit){return {hourly:['2026.06.10 13시','2026.06.10 14시'],daily:['2026.06.03','2026.06.04'],weekly:['2026-W22','2026-W23'],monthly:['2026.01','2026.02']}[unit]||['2026.06.03','2026.06.04'];}
-// 상단 메타(제목 + 메타 행 + 공백)
+// 상단 메타(제목 + 메타 6행 세로배치 + 공백) → 헤더는 9번째 행
 function metaRows(menu,unit){const cust=menu==='overview_customer';
  return [
   ['['+XL_TITLE[menu]+'] · '+(cust?'월 누적':UNIT_BASE[unit])+' 집계'],
-  ['파트너: SM','메뉴코드: '+XL_MENU[menu].code,'집계단위: '+(cust?'연도(월 누적)':UNIT_BASE[unit]),'조회기간: '+(cust?'2026':UNIT_PERIOD[unit]),'다운로드일시: 2026.06.10 13:34:11 (KST)','필터: '+XL_FILTER[menu]],
+  ['파트너: SM'],
+  ['메뉴코드: '+XL_MENU[menu].code],
+  ['집계단위: '+(cust?'월 누적(연도 기준)':UNIT_BASE[unit])],
+  ['조회기간: '+(cust?'2026':UNIT_PERIOD[unit])],
+  ['다운로드일시: 2026.06.10 13:34:11 (KST)'],
+  ['필터: '+XL_FILTER[menu]],
   []
  ];}
+const XL_META_LEN=8; // 제목1 + 메타6 + 공백1 (헤더는 0-based index 8)
+// xlsx-js-style 셀 서식: 제목 14pt 굵게 / 메타 10pt / 헤더 네이비 흰글씨 / 합계 강조
+function styleWs(ws,ncol){
+ const E=XLSX.utils.encode_cell, R=XLSX.utils.decode_range(ws['!ref']);
+ const set=(r,c,s)=>{const a=E({r,c}); if(ws[a])ws[a].s=Object.assign(ws[a].s||{},s);};
+ set(0,0,{font:{bold:true,sz:14,color:{rgb:'1F2330'}}});
+ for(let r=1;r<7;r++) set(r,0,{font:{sz:10,color:{rgb:'5A6072'}}});
+ const hr=XL_META_LEN; // 헤더 행(0-based)
+ for(let c=0;c<ncol;c++) set(hr,c,{font:{bold:true,sz:10,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F2A44'}},alignment:{horizontal:'center'}});
+ const lr=R.e.r, f=ws[E({r:lr,c:0})];
+ if(f&&f.v==='합계') for(let c=0;c<ncol;c++) set(lr,c,{font:{bold:true},fill:{fgColor:{rgb:'F1EEFB'}}});
+ ws['!cols']=Array.from({length:ncol},()=>({wch:14}));
+}
 // 메뉴별 데이터(기획서 샘플 기준)
 function buildAoa(menu,unit){const base=UNIT_BASE[unit],pr=unitPeriods(unit),per=UNIT_PERIOD[unit];let head,rows=[];
  if(menu==='overview_sales'){
@@ -867,10 +885,15 @@ function doDownload(){
    ['customer_new_monthly','아티스트',custNew]].forEach(([sn,first,data])=>{
     const head=[first].concat(MONTHS);
     const body=data.map(r=>{const vals=r.slice(1);return [r[0]].concat(MONTHS.map((_,i)=>vals[i]!=null?vals[i]:0));});
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(meta.concat([head]).concat(body)),sn);
+    const ws=XLSX.utils.aoa_to_sheet(meta.concat([head]).concat(body));
+    styleWs(ws,head.length);
+    XLSX.utils.book_append_sheet(wb,ws,sn);
    });
  }else{
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildAoa(curXlMenu,unit)),(m.code+'_'+unit).slice(0,31));
+  const aoa=buildAoa(curXlMenu,unit);
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  styleWs(ws,aoa[XL_META_LEN].length);
+  XLSX.utils.book_append_sheet(wb,ws,(m.code+'_'+unit).slice(0,31));
  }
  const fname='비파센커머스_SM_'+m.code+'_'+unit+'_'+ts+'.xlsx';
  XLSX.writeFile(wb,fname);
