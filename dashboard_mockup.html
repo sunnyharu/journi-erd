@@ -879,10 +879,12 @@ function doDownload(){
  const m=XL_MENU[curXlMenu],unit=curUnit(curXlMenu),ts='20260610133411';
  const wb=XLSX.utils.book_new();
  if(m.customer){
-  const meta=metaRows('overview_customer','monthly');
+  const SUBT={customer_kpi_monthly:'고객지표 KPI',customer_cumulative_monthly:'아티스트별 누적구매고객수',customer_new_monthly:'아티스트별 신규구매고객수'};
   [['customer_kpi_monthly','지표',kpiMonth.map(r=>[r[0]].concat(r[1]))],
    ['customer_cumulative_monthly','아티스트',custCum],
    ['customer_new_monthly','아티스트',custNew]].forEach(([sn,first,data])=>{
+    const meta=metaRows('overview_customer','monthly');
+    meta[0]=['[Overview 고객지표] '+SUBT[sn]+' · 월'];
     const head=[first].concat(MONTHS);
     const body=data.map(r=>{const vals=r.slice(1);return [r[0]].concat(MONTHS.map((_,i)=>vals[i]!=null?vals[i]:0));});
     const ws=XLSX.utils.aoa_to_sheet(meta.concat([head]).concat(body));
