@@ -554,7 +554,8 @@ function updModal(){
  const fname='비파센커머스_SM_'+m.code+'_'+unit+'_'+ts+'.xlsx';
  const unitLine=m.customer?'월 누적(연도 기준)':UNIT_KO[unit]+' ('+unit+')';
  const ipNote=m.customer?'':'<br>· 인당 지표(인당거래액·인당구매수·인당주문상품수) 엑셀 미제공 <span style="color:#8b909c">(구매전환율은 예외)</span>';
- const subNote=curXlMenu==='product_detail'?'<br>· 화면 소계는 엑셀 미노출 (전체 합계만 노출)':'';
+ const aggNote=m.customer?'':'<br>· 엑셀은 집계행(합계·평균) 없이 <b>일/주/월별 원값 행만</b> 제공 <span style="color:#8b909c">(구매고객수·UV·전환율 평균은 화면 전용)</span>';
+ const subNote=curXlMenu==='product_detail'?'<br>· 화면 소계·합계는 엑셀 미노출':'';
  document.getElementById('dlMeta').innerHTML=
   '· 메뉴코드: <b>'+m.code+'</b>'+
   '<br>· 집계 단위: '+unitLine+' <span style="color:#8b909c">— 현재 조회 조건 기준</span>'+
@@ -562,7 +563,7 @@ function updModal(){
   '<br>· 시트명: '+sheets+
   '<br>· 상단 메타: 파트너 / 메뉴코드 / 집계단위 / 조회기간 / 다운로드일시(KST) / 필터'+
   '<br>· 최대 10만행(초과 시 차단) · 최대 1년(366일)'+
-  ipNote+subNote;
+  ipNote+aggNote+subNote;
 }
 
 // ── 상품ID 마스터 (샘플): id → 상품명 ──
@@ -853,24 +854,19 @@ function buildAoa(menu,unit){const base=UNIT_BASE[unit],pr=unitPeriods(unit),per
  if(menu==='overview_sales'){
   head=['기준','조회기간','파트너','총 결제거래액','순 결제거래액','주문건수','주문상품수','구매수량','구매고객수','방문자수(UV)','구매전환율'];
   rows=[[base,pr[0],'SM',235000000,207975000,5900,9145,10030,3900,38000,'10.3%'],
-        [base,pr[1],'SM',220000000,194700000,5400,8400,9200,3600,36000,'10.0%'],
-        ['합계','','',1398000000,1237230000,35588,55158,60497,31540,218000,'14.5%']];
+        [base,pr[1],'SM',220000000,194700000,5400,8400,9200,3600,36000,'10.0%']];
  }else if(menu==='artist'){
   head=['기준','조회기간','순위','아티스트','총 결제거래액','순 결제거래액','주문상품수','구매수량','구매고객수','방문자수(UV)','구매전환율'];
   const top=[['EXO',342000000,302670000,6840,7524,4500,32400,'13.9%'],['aespa',287000000,253995000,5740,6314,3776,27187,'13.9%'],['NCT 127',231000000,203280000,4910,5400,3200,25600,'12.5%']];
   top.forEach((a,i)=>rows.push([base,per,i+1,a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7]]));
-  const sum=j=>top.reduce((s,a)=>s+a[j],0);
-  rows.push(['합계','','','',sum(1),sum(2),sum(3),sum(4),sum(5),sum(6),'13.5%']);
  }else if(menu==='product_detail'){
   head=['기준','조회기간','프로젝트명','아티스트','현장수령','상품ID','상품명','총 결제거래액','순 결제거래액','주문상품수','구매수량','구매고객수','방문자수(UV)','구매전환율'];
   rows=[[base,per,'OFFICIAL FANLIGHT','EXO','전체','620132273','EXO 응원봉',406586330,360000000,4999,8120,5240,42000,'12.5%'],
-        [base,per,'The 2nd Album [LEMONADE]','aespa','전체','451314230','LEMONADE (SMini Ver.)',180000000,158000000,1456,3500,2400,18000,'13.3%'],
-        ['합계','','','','','','',586586330,518000000,6455,11620,7640,60000,'13.0%']];
+        [base,per,'The 2nd Album [LEMONADE]','aespa','전체','451314230','LEMONADE (SMini Ver.)',180000000,158000000,1456,3500,2400,18000,'13.3%']];
  }else if(menu==='country_detail'){
   head=['기준','조회기간','파트너명','국가기준','프로젝트','아티스트','국가','총 결제거래액','순 결제거래액','주문건수','주문상품수','구매수량','구매고객수','방문자수(UV)','구매전환율'];
   rows=[[base,per,'SM','가입','OFFICIAL FANLIGHT','EXO','대한민국',164868000,145908180,18318,23813,29308,23652,143880,'16.4%'],
-        [base,per,'SM','가입','OFFICIAL FANLIGHT','EXO','일본',24980000,22107300,2775,3608,4440,3583,21800,'16.4%'],
-        ['합계','','','','','','',249800000,221000000,27756,36083,44400,35837,218000,'16.4%']];
+        [base,per,'SM','가입','OFFICIAL FANLIGHT','EXO','일본',24980000,22107300,2775,3608,4440,3583,21800,'16.4%']];
  }
  return metaRows(menu,unit).concat([head]).concat(rows);
 }
