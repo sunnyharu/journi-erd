@@ -236,10 +236,10 @@ tr:hover td { background: #fafbff; }
       <button class="fbtn" onclick="pickPeriod(this)">이번달</button>
       <select class="fsel" id="ovGran"><option>일간</option><option>주간</option><option>월간</option></select>
       <div class="fdate"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg><span id="ovDS">2026.06.03</span></div>
-      <span class="tilde">~</span>
-      <div class="fdate"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg><span id="ovDE">2026.06.10</span></div>
+      <span class="tilde" id="ovTilde">~</span>
+      <div class="fdate" id="ovDEBox"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg><span id="ovDE">2026.06.10</span></div>
       <button class="fbtn" id="cmpBtn" onclick="toggleCmp()">비교</button>
-      <div class="compare-fields" id="cmpFields"><span class="tag">비교</span><div class="fdate">2026.05.27</div><span class="tilde">~</span><div class="fdate">2026.06.02</div></div>
+      <div class="compare-fields" id="cmpFields"><span class="tag">비교</span><div class="fdate"><span id="cmpDS">2026.05.27</span></div><span class="tilde" id="cmpTilde">~</span><div class="fdate" id="cmpDEBox"><span id="cmpDE">2026.06.02</span></div></div>
       <div class="f-right"><button class="f-query" onclick="applyOvQuery()">조회</button><button class="f-download" onclick="openModal('overview_sales')">⬇ 엑셀다운로드</button></div>
     </div>
     <div id="prodIdArea" class="prodid-area">
@@ -485,7 +485,7 @@ function coSub(s,el){document.querySelectorAll('#tab-country .inner-tab').forEac
 let isToday=false,isCompare=false;
 let ovPending='최근7일', appliedGran='일간';
 function pickPeriod(b){const bar=b.closest('.filterbar');bar.querySelectorAll('.fbtn:not([id^=cmpBtn])').forEach(x=>{x.classList.remove('active','today-active');});const today=b.textContent==='오늘';b.classList.add(today?'today-active':'active');
-  if(bar.closest('#tab-overview')){ovPending=b.textContent;setTodayUI(today);}
+  if(bar.closest('#tab-overview')){ovPending=b.textContent;setTodayUI(today);setYesterdayUI(b.textContent==='어제');}
   else if(bar.closest('#tab-artist')){setArtistToday(today);}
   else if(bar.closest('#tab-country')){setCountryToday(today);}
 }
@@ -501,6 +501,15 @@ function setCountryToday(today){const gran=document.getElementById('coGran'); if
 function setTodayUI(today){const pid=document.getElementById('prodIdArea'),cmp=document.getElementById('cmpBtn'),gran=document.getElementById('ovGran');
   pid.style.display=today?'flex':'none'; cmp.disabled=today; gran.disabled=today;
   if(today&&isCompare){isCompare=false;document.getElementById('cmpFields').classList.remove('on');cmp.classList.remove('active');document.getElementById('cmpKpiWrap').classList.remove('on');document.getElementById('cmpLegend').style.display='none';document.querySelectorAll('#kpiGrid .kpi-delta').forEach(d=>d.classList.remove('show'));}
+}
+// 어제 선택 시: 메인·비교 날짜 피커를 단일 캘린더로 (어제=단일일, 비교=그제 단일일)
+function setYesterdayUI(y){
+ document.getElementById('ovTilde').style.display=y?'none':'';
+ document.getElementById('ovDEBox').style.display=y?'none':'flex';
+ document.getElementById('cmpTilde').style.display=y?'none':'';
+ document.getElementById('cmpDEBox').style.display=y?'none':'flex';
+ document.getElementById('cmpDS').textContent=y?'2026.06.08':'2026.05.27';
+ if(!y)document.getElementById('cmpDE').textContent='2026.06.02';
 }
 // 조회 버튼 클릭 시에만 확정 적용
 function applyOvQuery(){ovPeriod=ovPending; appliedGran=document.getElementById('ovGran').value; isToday=(ovPending==='오늘'); drawTrend();}
@@ -661,10 +670,11 @@ function dailyRange(){
 function drawTrend(){
  trendCharts.forEach(c=>c.destroy());trendCharts=[];
  const gran=appliedGran;
- let labels, getData, title;
+ let labels, getData, title, yesterMode=false;
  if(isToday){ labels=hours; getData=k=>k.hourly; title='지표별 당일 시간대별 추이'; }
  else if(gran==='주간'){ labels=WEEKLY_LBL; getData=k=>k.weekly; title='지표별 추이 (주간)'; }
  else if(gran==='월간'){ labels=MONTHLY_LBL; getData=k=>k.monthly; title='지표별 추이 (월간)'; }
+ else if(ovPeriod==='어제'){ yesterMode=true; labels=isCompare?['6/8 (그제)','6/9 (어제)']:['6/9 (어제)']; getData=k=>k.daily.slice(8,9); title='지표별 추이 (어제)'; }
  else { const r=dailyRange(); labels=DAILY_FULL_LBL.slice(r[0],r[1]); getData=k=>k.daily.slice(r[0],r[1]); title='지표별 추이 (일간)'; }
  document.getElementById('trendSecTitle').innerHTML=title+' <span class="info" title="6개 지표 시계열">i</span>';
  const grid=document.getElementById('trendGrid');
@@ -673,7 +683,12 @@ function drawTrend(){
   const base=getData(k);
   let ds;
   const prodMode=isToday&&pidList.length>0;
-  if(prodMode){
+  if(yesterMode){
+   // 어제: 하루 값을 점 하나로 표기, 비교 ON 시 그제 점 추가
+   const v=k.daily[8], c=k.ratio?+(k.daily[7]).toFixed(1):k.daily[7];
+   ds=[{label:'어제',data:isCompare?[null,v]:[v],borderColor:BLUE,backgroundColor:BLUE,pointRadius:6,pointHoverRadius:8,showLine:false}];
+   if(isCompare)ds.push({label:'그제 (비교)',data:[c,null],borderColor:GRAY,backgroundColor:GRAY,pointRadius:6,pointHoverRadius:8,showLine:false});
+  }else if(prodMode){
    // 오늘 + 상품ID 선택 시: 상품별 색상 구분 멀티 라인
    const share=[0.5,0.25,0.13,0.08,0.04];
    ds=pidList.map((pid,pi)=>({label:PROD_NAME[pid]||pid,data:base.map(v=>k.ratio?+(v*share[pi]*2).toFixed(1):Math.round(v*share[pi]*10)/10),borderColor:PAL[pi%PAL.length],backgroundColor:'transparent',tension:.4,pointRadius:2}));
@@ -681,7 +696,7 @@ function drawTrend(){
    ds=[{label:'조회기간',data:base,borderColor:BLUE,backgroundColor:isToday?'rgba(66,99,235,.7)':'rgba(66,99,235,.07)',fill:!isToday,tension:.4,pointRadius:isToday?0:2,borderRadius:isToday?3:0}];
    if(isCompare&&!isToday){const cmp=base.map(v=>k.ratio?+(v*0.92).toFixed(1):Math.round(v*0.88));ds.push({label:'비교기간',data:cmp,borderColor:GRAY,borderDash:[4,3],backgroundColor:'transparent',tension:.4,pointRadius:2});}
   }
-  const ch=new Chart(document.getElementById('tc'+i),{type:(isToday&&!prodMode)?'bar':'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:prodMode,position:'top',labels:{font:{size:8},boxWidth:8,usePointStyle:true}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+(k.unit==='%'?c.parsed.y+'%':c.parsed.y.toLocaleString()+(k.unit==='백만원'?'백만원':k.unit==='K'?'K':''))}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa'}},y:{grid:{color:'#f1f3f6'},ticks:{font:{size:9},color:'#aaa',callback:k.yf}}}}});
+  const ch=new Chart(document.getElementById('tc'+i),{type:(isToday&&!prodMode)?'bar':'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:prodMode||(yesterMode&&isCompare),position:'top',labels:{font:{size:8},boxWidth:8,usePointStyle:true}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+(k.unit==='%'?c.parsed.y+'%':c.parsed.y.toLocaleString()+(k.unit==='백만원'?'백만원':k.unit==='K'?'K':''))}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa'}},y:{grid:{color:'#f1f3f6'},ticks:{font:{size:9},color:'#aaa',callback:k.yf}}}}});
   trendCharts.push(ch);
  });
  updateOvDates(gran);
