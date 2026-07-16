@@ -485,7 +485,9 @@ function coSub(s,el){document.querySelectorAll('#tab-country .inner-tab').forEac
 let isToday=false,isCompare=false;
 let ovPending='최근7일', appliedGran='일간';
 function pickPeriod(b){const bar=b.closest('.filterbar');bar.querySelectorAll('.fbtn:not([id^=cmpBtn])').forEach(x=>{x.classList.remove('active','today-active');});const today=b.textContent==='오늘';b.classList.add(today?'today-active':'active');
-  if(bar.closest('#tab-overview')){ovPending=b.textContent;setTodayUI(today);setYesterdayUI(b.textContent==='어제');}
+  if(bar.closest('#tab-overview')){ovPending=b.textContent;setTodayUI(today);const y=b.textContent==='어제';setYesterdayUI(y);
+   if(y&&!isCompare)toggleCmp(); // 어제 선택 시 비교 디폴트 ON (전전일 자동 세팅)
+  }
   else if(bar.closest('#tab-artist')){setArtistToday(today);}
   else if(bar.closest('#tab-country')){setCountryToday(today);}
 }
