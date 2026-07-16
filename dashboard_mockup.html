@@ -68,6 +68,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'M
 .cal-cell.empty:hover { background: transparent; }
 .cal-cell.sel { background: #4263eb; color: #fff; font-weight: 700; }
 .cal-cell.sel:hover { background: #4263eb; }
+.cal-title .cal-y, .cal-title .cal-m { cursor: pointer; padding: 1px 4px; border-radius: 4px; }
+.cal-title .cal-y:hover, .cal-title .cal-m:hover { background: #eef2ff; color: #4263eb; }
+.cal-yr { display: grid; grid-template-columns: repeat(3,1fr); gap: 4px; }
+.cal-mo { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; }
+.cal-yr .cal-cell, .cal-mo .cal-cell { padding: 11px 0; }
 .compare-fields { display: none; align-items: center; gap: 8px; }
 .compare-fields.on { display: flex; }
 .compare-fields .tag { font-size: 11px; background: #f5f3ff; color: #7c3aed; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
@@ -1000,8 +1005,9 @@ function doDownload(){
 
 // ── 날짜 캘린더 (Overview 매출지표) ──
 // 규칙: 일간=전체 활성 / 주간=시작일 월요일·종료일 일요일만 활성 / 월간=시작일 1일·종료일 말일만 활성 (비교 동일)
-let calTarget=null,calRole='start',calY=2026,calM=5;
+let calTarget=null,calRole='start',calY=2026,calM=5,calView='days';
 const CAL_DOW=['월','화','수','목','금','토','일'];
+const CAL_YR_START=2025; // 연도 선택: 2025년부터 10개년
 function ovGranVal(){const g=document.getElementById('ovGran');return g.disabled?'일간':g.value;} // 오늘·어제(단일일)는 일간처럼 전체 활성
 function calEnabled(d,gran,role){ // d=Date
  if(gran==='주간') return role==='end'?d.getDay()===0:d.getDay()===1;           // 종료=일, 시작=월
@@ -1009,7 +1015,7 @@ function calEnabled(d,gran,role){ // d=Date
  return true;
 }
 function openCal(ev,spanId,role){ev.stopPropagation();
- calTarget=spanId;calRole=role;
+ calTarget=spanId;calRole=role;calView='days';
  const v=(document.getElementById(spanId).textContent||'').trim().split('.').map(Number);
  if(v.length===3){calY=v[0];calM=v[1]-1;}
  renderCal();
@@ -1020,7 +1026,23 @@ function openCal(ev,spanId,role){ev.stopPropagation();
  pop.style.left=left+'px';pop.style.top=top+'px';
 }
 function calNav(d){calM+=d;if(calM<0){calM=11;calY--;}else if(calM>11){calM=0;calY++;}renderCal();}
+function calSetYear(y){calY=y;calView='days';renderCal();}
+function calSetMonth(m){calM=m;calView='days';renderCal();}
+function calShow(v){calView=v;renderCal();}
 function renderCal(){
+ const pop=document.getElementById('calPop');
+ if(calView==='years'){
+  let cells='';
+  for(let y=CAL_YR_START;y<CAL_YR_START+10;y++)cells+=`<div class="cal-cell${y===calY?' sel':''}" onclick="calSetYear(${y})">${y}</div>`;
+  pop.innerHTML=`<div class="cal-hd"><span class="cal-title">연도 선택</span><button class="cal-nav" onclick="calShow('days')">✕</button></div><div class="cal-yr">${cells}</div>`;
+  return;
+ }
+ if(calView==='months'){
+  let cells='';
+  for(let m=0;m<12;m++)cells+=`<div class="cal-cell${m===calM?' sel':''}" onclick="calSetMonth(${m})">${m+1}월</div>`;
+  pop.innerHTML=`<div class="cal-hd"><span class="cal-title">${calY}년 · 월 선택</span><button class="cal-nav" onclick="calShow('days')">✕</button></div><div class="cal-mo">${cells}</div>`;
+  return;
+ }
  const gran=ovGranVal();
  const cur=(document.getElementById(calTarget).textContent||'').trim();
  const first=new Date(calY,calM,1),off=(first.getDay()+6)%7,dim=new Date(calY,calM+1,0).getDate();
@@ -1034,18 +1056,20 @@ function renderCal(){
   cells+=`<div class="cal-cell${en?'':' off'}${sel?' sel':''}"${en?` onclick="calPick(${calY},${calM},${d})"`:''}>${d}</div>`;
  }
  document.getElementById('calPop').innerHTML=
-  `<div class="cal-hd"><button class="cal-nav" onclick="calNav(-1)">‹</button><span class="cal-title">${calY}.${String(calM+1).padStart(2,'0')}</span><button class="cal-nav" onclick="calNav(1)">›</button></div>`+
+  `<div class="cal-hd"><button class="cal-nav" onclick="calNav(-1)">‹</button><span class="cal-title"><span class="cal-y" onclick="calShow('years')">${calY}</span>.<span class="cal-m" onclick="calShow('months')">${String(calM+1).padStart(2,'0')}</span></span><button class="cal-nav" onclick="calNav(1)">›</button></div>`+
   `<div class="cal-rule">${ruleTxt}</div>`+
   `<div class="cal-dow">${CAL_DOW.map((w,i)=>`<span class="${i===6?'sun':''}">${w}</span>`).join('')}</div>`+
   `<div class="cal-grid">${cells}</div>`;
 }
 function calPick(y,m,d){const ds=y+'.'+String(m+1).padStart(2,'0')+'.'+String(d).padStart(2,'0');document.getElementById(calTarget).textContent=ds;if(calTarget==='ovDS'||calTarget==='ovDE')ovCustom=true;updSalesDate();closeCal();}
 function closeCal(){document.getElementById('calPop').classList.remove('on');}
-document.addEventListener('click',e=>{const p=document.getElementById('calPop');if(p.classList.contains('on')&&!p.contains(e.target)&&!e.target.closest('.fdate'))closeCal();});
+// 캘린더 팝업 엘리먼트 보장 (스크립트가 DOM보다 먼저 실행돼도 안전하게 생성)
+(function(){let p=document.getElementById('calPop');if(!p){p=document.createElement('div');p.className='cal-pop';p.id='calPop';document.body.appendChild(p);}
+ p.addEventListener('click',e=>e.stopPropagation());})(); // 내부 클릭은 문서 핸들러로 전파 차단(재렌더 시 오작동 방지)
+document.addEventListener('click',e=>{const p=document.getElementById('calPop');if(p&&p.classList.contains('on')&&!p.contains(e.target)&&!e.target.closest('.fdate'))closeCal();});
 
 // init — 비교하기는 '전주 동요일 7일' 디폴트 노출 (v1.6 정책)
 renderKpi();drawTrend();toggleCmp();updSalesDate();
 </script>
-<div class="cal-pop" id="calPop"></div>
 </body>
 </html>
