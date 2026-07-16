@@ -310,9 +310,9 @@ tr:hover td { background: #fafbff; }
       <button class="fbtn active" onclick="pickPeriod(this)">최근7일</button>
       <button class="fbtn" onclick="pickPeriod(this)">이번달</button>
       <select class="fsel"><option>일간</option><option>주간</option><option>월간</option></select>
-      <div class="fdate" id="arDS">2026.05.26</div><span class="fdate-box" id="arDEBox"><span class="tilde">~</span><div class="fdate">2026.06.02</div></span>
+      <div class="fdate" id="arDS">2026.05.26</div><span class="tilde" id="arTilde">~</span><div class="fdate" id="arDEBox">2026.06.02</div>
       <button class="fbtn active" id="cmpBtn2" onclick="toggleCmp2(this)">비교</button>
-      <div class="compare-fields on" id="cmpFields2"><span class="tag">비교</span><div class="fdate" id="arCmpDS">2026.05.19</div><span class="fdate-box" id="arCmpDEBox"><span class="tilde">~</span><div class="fdate">2026.05.25</div></span></div>
+      <div class="compare-fields on" id="cmpFields2"><span class="tag">비교</span><div class="fdate" id="arCmpDS">2026.05.19</div><span class="tilde" id="arCmpTilde">~</span><div class="fdate" id="arCmpDEBox">2026.05.25</div></div>
       <div class="f-right"><button class="f-query">조회</button></div>
     </div>
 
@@ -492,7 +492,7 @@ function pickPeriod(b){const bar=b.closest('.filterbar');bar.querySelectorAll('.
   if(bar.closest('#tab-overview')){ovPending=b.textContent;setTodayUI(today);const y=b.textContent==='어제';setYesterdayUI(y);
    if(y&&!isCompare)toggleCmp(); // 어제 선택 시 비교 디폴트 ON (전전일 자동 세팅)
   }
-  else if(bar.closest('#tab-artist')){artPeriod=b.textContent;setArtistToday(today);const y=b.textContent==='어제';setArtistYesterdayUI(y);
+  else if(bar.closest('#tab-artist')){artPeriod=b.textContent;setArtistToday(today);const y=b.textContent==='어제';
    if(y&&!document.getElementById('cmpBtn2').classList.contains('active'))setArtistCmp(true); // 어제 → 전전일 비교 디폴트 ON
    setArtistDates(b.textContent);renderArtist();
   }
@@ -507,14 +507,16 @@ function setArtistToday(today){
 }
 // 아티스트 비교 상태 명시적 세팅 (버튼·필드·Diff 헤더·표 동기화)
 function setArtistCmp(on){const b=document.getElementById('cmpBtn2');b.classList.toggle('active',on);document.getElementById('cmpFields2').classList.toggle('on',on);document.getElementById('diffHead').style.display=on?'table-cell':'none';}
-// 어제 선택 시: 메인·비교 날짜를 단일 캘린더로 (어제=단일일, 비교=전전일 단일일)
-function setArtistYesterdayUI(y){document.getElementById('arDEBox').style.display=y?'none':'';document.getElementById('arCmpDEBox').style.display=y?'none':'';}
-// 조회기간별 날짜 필드(샘플) 갱신
+// 조회기간별 날짜 필드(샘플) 갱신 + 단일일(오늘·어제)은 종료일·틸드 숨겨 단일 캘린더로
 function setArtistDates(p){const ds=document.getElementById('arDS'),cds=document.getElementById('arCmpDS'),deb=document.getElementById('arDEBox'),cdeb=document.getElementById('arCmpDEBox');
-  if(p==='오늘'){ds.textContent='2026.06.10';deb.style.display='none';}
-  else if(p==='어제'){ds.textContent='2026.06.09';cds.textContent='2026.06.08';deb.style.display='none';cdeb.style.display='none';}
-  else if(p==='이번달'){ds.textContent='2026.06.01';deb.querySelector('.fdate').textContent='2026.06.10';deb.style.display='';cds.textContent='2026.05.01';cdeb.querySelector('.fdate').textContent='2026.05.10';cdeb.style.display='';}
-  else{ds.textContent='2026.05.26';deb.querySelector('.fdate').textContent='2026.06.02';deb.style.display='';cds.textContent='2026.05.19';cdeb.querySelector('.fdate').textContent='2026.05.25';cdeb.style.display='';}
+  const t=document.getElementById('arTilde'),ct=document.getElementById('arCmpTilde');
+  const single=(p==='오늘'||p==='어제');
+  t.style.display=single?'none':'';deb.style.display=single?'none':'flex';
+  ct.style.display=single?'none':'';cdeb.style.display=single?'none':'flex';
+  if(p==='오늘'){ds.textContent='2026.06.10';}
+  else if(p==='어제'){ds.textContent='2026.06.09';cds.textContent='2026.06.08';}
+  else if(p==='이번달'){ds.textContent='2026.06.01';deb.textContent='2026.06.10';cds.textContent='2026.05.01';cdeb.textContent='2026.05.10';}
+  else{ds.textContent='2026.05.26';deb.textContent='2026.06.02';cds.textContent='2026.05.19';cdeb.textContent='2026.05.25';}
 }
 function setCountryToday(today){const gran=document.getElementById('coGran'); if(gran)gran.disabled=today;}
 // 오늘 선택 시 입력 UI 즉시 토글(상품ID/비교/단위) — 단, 차트/날짜는 '조회' 클릭 시 적용
