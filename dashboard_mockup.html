@@ -44,6 +44,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'M
 .f-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 .update-txt { font-size: 11px; color: #b4b8c2; margin: 0 0 16px; }
 .tilde { color: #c4c8d0; }
+/* 캘린더 팝업 */
+.cal-pop { position: absolute; z-index: 200; background: #fff; border: 1px solid #d8dbe3; border-radius: 10px; box-shadow: 0 8px 24px rgba(30,35,48,.15); padding: 12px; width: 236px; display: none; }
+.cal-pop.on { display: block; }
+.cal-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.cal-title { font-size: 13px; font-weight: 700; color: #1f2330; }
+.cal-nav { border: none; background: #f1f3f6; width: 26px; height: 26px; border-radius: 6px; cursor: pointer; color: #5a6072; font-size: 15px; line-height: 1; }
+.cal-nav:hover { background: #e6e8ee; }
+.cal-rule { font-size: 10px; color: #8b909c; margin-bottom: 6px; text-align: center; }
+.cal-dow, .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
+.cal-dow span { text-align: center; font-size: 10px; color: #8b909c; font-weight: 600; padding: 2px 0; }
+.cal-dow span.sun { color: #e5484d; }
+.cal-cell { text-align: center; font-size: 12px; padding: 6px 0; border-radius: 6px; color: #1f2330; cursor: pointer; }
+.cal-cell:hover { background: #eef2ff; }
+.cal-cell.off { color: #cdd1da; cursor: default; }
+.cal-cell.off:hover { background: transparent; }
+.cal-cell.empty { cursor: default; }
+.cal-cell.empty:hover { background: transparent; }
+.cal-cell.sel { background: #4263eb; color: #fff; font-weight: 700; }
+.cal-cell.sel:hover { background: #4263eb; }
 .compare-fields { display: none; align-items: center; gap: 8px; }
 .compare-fields.on { display: flex; }
 .compare-fields .tag { font-size: 11px; background: #f5f3ff; color: #7c3aed; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
@@ -238,11 +257,11 @@ tr:hover td { background: #fafbff; }
       <button class="fbtn active" onclick="pickPeriod(this)">최근7일</button>
       <button class="fbtn" onclick="pickPeriod(this)">이번달</button>
       <select class="fsel" id="ovGran"><option>일간</option><option>주간</option><option>월간</option></select>
-      <div class="fdate"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg><span id="ovDS">2026.06.03</span></div>
+      <div class="fdate" onclick="openCal(event,'ovDS','start')"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg><span id="ovDS">2026.06.03</span></div>
       <span class="tilde" id="ovTilde">~</span>
-      <div class="fdate" id="ovDEBox"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg><span id="ovDE">2026.06.10</span></div>
+      <div class="fdate" id="ovDEBox" onclick="openCal(event,'ovDE','end')"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="11" rx="1.5" stroke="#888" fill="none"/><line x1="1" y1="5" x2="13" y2="5" stroke="#888"/></svg><span id="ovDE">2026.06.10</span></div>
       <button class="fbtn" id="cmpBtn" onclick="toggleCmp()">비교</button>
-      <div class="compare-fields" id="cmpFields"><span class="tag">비교</span><div class="fdate"><span id="cmpDS">2026.05.27</span></div><span class="tilde" id="cmpTilde">~</span><div class="fdate" id="cmpDEBox"><span id="cmpDE">2026.06.02</span></div></div>
+      <div class="compare-fields" id="cmpFields"><span class="tag">비교</span><div class="fdate" onclick="openCal(event,'cmpDS','start')"><span id="cmpDS">2026.05.27</span></div><span class="tilde" id="cmpTilde">~</span><div class="fdate" id="cmpDEBox" onclick="openCal(event,'cmpDE','end')"><span id="cmpDE">2026.06.02</span></div></div>
       <div class="f-right"><button class="f-query" onclick="applyOvQuery()">조회</button><button class="f-download" onclick="openModal('overview_sales')">⬇ 엑셀다운로드</button></div>
     </div>
     <div id="prodIdArea" class="prodid-area">
@@ -963,8 +982,54 @@ function doDownload(){
  closeModal();
 }
 
+// ── 날짜 캘린더 (Overview 매출지표) ──
+// 규칙: 일간=전체 활성 / 주간=시작일 월요일·종료일 일요일만 활성 / 월간=시작일 1일·종료일 말일만 활성 (비교 동일)
+let calTarget=null,calRole='start',calY=2026,calM=5;
+const CAL_DOW=['월','화','수','목','금','토','일'];
+function ovGranVal(){const g=document.getElementById('ovGran');return g.disabled?'일간':g.value;} // 오늘·어제(단일일)는 일간처럼 전체 활성
+function calEnabled(d,gran,role){ // d=Date
+ if(gran==='주간') return role==='end'?d.getDay()===0:d.getDay()===1;           // 종료=일, 시작=월
+ if(gran==='월간'){const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();return role==='end'?d.getDate()===last:d.getDate()===1;}
+ return true;
+}
+function openCal(ev,spanId,role){ev.stopPropagation();
+ calTarget=spanId;calRole=role;
+ const v=(document.getElementById(spanId).textContent||'').trim().split('.').map(Number);
+ if(v.length===3){calY=v[0];calM=v[1]-1;}
+ renderCal();
+ const pop=document.getElementById('calPop'),r=ev.currentTarget.getBoundingClientRect();
+ pop.classList.add('on');
+ let left=r.left+window.scrollX, top=r.bottom+window.scrollY+6;
+ if(left+pop.offsetWidth>window.scrollX+document.documentElement.clientWidth-8) left=window.scrollX+document.documentElement.clientWidth-pop.offsetWidth-8;
+ pop.style.left=left+'px';pop.style.top=top+'px';
+}
+function calNav(d){calM+=d;if(calM<0){calM=11;calY--;}else if(calM>11){calM=0;calY++;}renderCal();}
+function renderCal(){
+ const gran=ovGranVal();
+ const cur=(document.getElementById(calTarget).textContent||'').trim();
+ const first=new Date(calY,calM,1),off=(first.getDay()+6)%7,dim=new Date(calY,calM+1,0).getDate();
+ const ruleTxt={일간:'모든 날짜 선택 가능',주간:calRole==='end'?'주 종료일: 일요일만 선택':'주 시작일: 월요일만 선택',월간:calRole==='end'?'월 종료일: 말일만 선택':'월 시작일: 1일만 선택'}[gran];
+ let cells='';
+ for(let i=0;i<off;i++)cells+='<div class="cal-cell empty"></div>';
+ for(let d=1;d<=dim;d++){
+  const dt=new Date(calY,calM,d),en=calEnabled(dt,gran,calRole);
+  const ds=calY+'.'+String(calM+1).padStart(2,'0')+'.'+String(d).padStart(2,'0');
+  const sel=en&&ds===cur; // 비활성 날짜는 선택 하이라이트 안 함(클릭 가능해 보이지 않게)
+  cells+=`<div class="cal-cell${en?'':' off'}${sel?' sel':''}"${en?` onclick="calPick(${calY},${calM},${d})"`:''}>${d}</div>`;
+ }
+ document.getElementById('calPop').innerHTML=
+  `<div class="cal-hd"><button class="cal-nav" onclick="calNav(-1)">‹</button><span class="cal-title">${calY}.${String(calM+1).padStart(2,'0')}</span><button class="cal-nav" onclick="calNav(1)">›</button></div>`+
+  `<div class="cal-rule">${ruleTxt}</div>`+
+  `<div class="cal-dow">${CAL_DOW.map((w,i)=>`<span class="${i===6?'sun':''}">${w}</span>`).join('')}</div>`+
+  `<div class="cal-grid">${cells}</div>`;
+}
+function calPick(y,m,d){const ds=y+'.'+String(m+1).padStart(2,'0')+'.'+String(d).padStart(2,'0');document.getElementById(calTarget).textContent=ds;closeCal();}
+function closeCal(){document.getElementById('calPop').classList.remove('on');}
+document.addEventListener('click',e=>{const p=document.getElementById('calPop');if(p.classList.contains('on')&&!p.contains(e.target)&&!e.target.closest('.fdate'))closeCal();});
+
 // init — 비교하기는 '전주 동요일 7일' 디폴트 노출 (v1.6 정책)
 renderKpi();drawTrend();toggleCmp();
 </script>
+<div class="cal-pop" id="calPop"></div>
 </body>
 </html>
