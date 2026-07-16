@@ -24,7 +24,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'M
 .subtab.active { color: #1f2330; font-weight: 700; border-bottom-color: #4263eb; }
 .content { padding: 22px 24px 30px; }
 .sec-title { font-size: 15px; font-weight: 700; color: #1f2330; margin: 4px 0 12px; display: flex; align-items: center; gap: 5px; }
-.sec-title .info { width: 14px; height: 14px; border-radius: 50%; border: 1px solid #c4c8d0; color: #c4c8d0; font-size: 9px; display: inline-flex; align-items: center; justify-content: center; cursor:help; }
+.sec-title .info { width: 14px; height: 14px; border-radius: 50%; border: 1px solid #c4c8d0; color: #c4c8d0; font-size: 9px; display: inline-flex; align-items: center; justify-content: center; cursor:help; position: relative; }
+.sec-title .info .tip { display: none; position: absolute; left: 50%; transform: translateX(-50%); top: 22px; z-index: 250; width: 340px; max-width: 78vw; background: #2b303b; color: #e8eaf0; font-size: 11px; font-weight: 400; line-height: 1.65; padding: 10px 13px; border-radius: 8px; box-shadow: 0 6px 20px rgba(30,35,48,.22); white-space: normal; text-align: left; }
+.sec-title .info .tip::before { content: ''; position: absolute; top: -5px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 9px; height: 9px; background: #2b303b; }
+.sec-title .info .tip b { color: #fff; font-weight: 700; }
+.sec-title .info:hover .tip { display: block; }
 .sec-title .date { color: #1f2330; }
 .sec-sub { font-size: 11px; color: #b4b8c2; font-weight: 400; margin-left: 4px; }
 
@@ -275,9 +279,8 @@ tr:hover td { background: #fafbff; }
 
     <!-- 매출지표 -->
     <div class="subp on" id="ov-sales">
-      <div class="sec-title"><span class="date">2026-06-09</span> 매출 지표 <span class="info" title="거래액·주문건수=기간 합산 / 구매고객수·UV·전환율=단위별 unique 평균(정수 반올림)">i</span></div>
+      <div class="sec-title"><span class="date" id="salesDate">2026-06-09</span> 매출 지표 <span class="info">i<span class="tip">구매고객수·방문자수(UV)는 <b>일/주/월 각 단위 기준 순 인원(unique)</b>입니다. 여러 단위를 묶어 조회하면 중복 방문 합산에 따른 과다 표기를 막기 위해 <b>단위별 순 인원의 평균(정수 반올림)</b>으로 표기됩니다. (그래프는 단위별 원값)</span></span></div>
       <div class="kpi-grid" id="kpiGrid"></div>
-      <div class="note">ⓘ 구매고객수·방문자수(UV)는 <b>일/주/월 각 단위 기준 순 인원(unique)</b>입니다. 여러 단위를 묶어 조회하면 중복 방문 합산에 따른 과다 표기를 막기 위해 <b>단위별 순 인원의 평균(정수 반올림)</b>으로 표기됩니다. (그래프는 단위별 원값)</div>
       <div class="cmp-kpi-wrap" id="cmpKpiWrap"><div class="cmp-kpi-grid" id="cmpKpiGrid"><span class="cmp-kpi-label">비교</span></div></div>
 
       <div class="section-header" style="margin:4px 0 12px">
@@ -553,7 +556,14 @@ function setYesterdayUI(y){
  if(!y)document.getElementById('cmpDE').textContent='2026.06.02';
 }
 // 조회 버튼 클릭 시에만 확정 적용
-function applyOvQuery(){ovPeriod=ovPending; appliedGran=document.getElementById('ovGran').value; isToday=(ovPending==='오늘'); drawTrend();}
+function applyOvQuery(){ovPeriod=ovPending; appliedGran=document.getElementById('ovGran').value; isToday=(ovPending==='오늘'); updSalesDate(); drawTrend();}
+// 매출지표 제목 날짜 = 선택(조회)한 날짜 기준
+function updSalesDate(){let txt;
+ if(ovPeriod==='오늘')txt='2026-06-10';
+ else if(ovPeriod==='어제')txt='2026-06-09';
+ else{const ds=document.getElementById('ovDS').textContent.trim().replace(/\./g,'-'),de=document.getElementById('ovDE').textContent.trim().replace(/\./g,'-');txt=ds===de?ds:ds+' ~ '+de;}
+ document.getElementById('salesDate').textContent=txt;
+}
 function toggleCmp(){if(document.getElementById('cmpBtn').disabled)return;isCompare=!isCompare;document.getElementById('cmpFields').classList.toggle('on',isCompare);document.getElementById('cmpBtn').classList.toggle('active',isCompare);document.getElementById('cmpKpiWrap').classList.toggle('on',isCompare);document.getElementById('cmpLegend').style.display=isCompare?'flex':'none';document.querySelectorAll('#kpiGrid .kpi-delta').forEach(d=>d.classList.toggle('show',isCompare));drawTrend();}
 function toggleCmp2(b){const on=b.classList.toggle('active');document.getElementById('cmpFields2').classList.toggle('on',on);document.getElementById('diffHead').style.display=on?'table-cell':'none';renderArtist();}
 function basisToggle(s){s.parentElement.querySelectorAll('span').forEach(x=>x.classList.remove('on'));s.classList.add('on');}
@@ -1028,7 +1038,7 @@ function closeCal(){document.getElementById('calPop').classList.remove('on');}
 document.addEventListener('click',e=>{const p=document.getElementById('calPop');if(p.classList.contains('on')&&!p.contains(e.target)&&!e.target.closest('.fdate'))closeCal();});
 
 // init — 비교하기는 '전주 동요일 7일' 디폴트 노출 (v1.6 정책)
-renderKpi();drawTrend();toggleCmp();
+renderKpi();drawTrend();toggleCmp();updSalesDate();
 </script>
 <div class="cal-pop" id="calPop"></div>
 </body>
