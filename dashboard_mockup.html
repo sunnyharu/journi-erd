@@ -314,7 +314,7 @@ tr:hover td { background: #fafbff; }
     </div>
 
     <div class="subp on" id="ar-list">
-      <div class="section-header"><div class="sec-title" style="margin:0">전체 아티스트 실적 <span class="sec-sub">— 전체 12개</span></div><button class="f-download" onclick="openModal('artist')">⬇ 엑셀다운로드</button></div>
+      <div class="section-header"><div class="sec-title" style="margin:0">전체 아티스트 실적 <span class="sec-sub">— 전체 12개 · 조회 기간 : 20260526 - 20260602</span></div><button class="f-download" onclick="openModal('artist')">⬇ 엑셀다운로드</button></div>
       <div class="tbl-wrap">
         <table id="artistTable">
           <thead><tr>
@@ -331,7 +331,7 @@ tr:hover td { background: #fafbff; }
     </div>
 
     <div class="subp" id="ar-compare">
-      <div class="sec-title">아티스트별 비교분석 <span class="info" title="선택 아티스트 멀티 라인 (지표별 전체 펼침)">i</span></div>
+      <div class="sec-title">아티스트별 비교분석 <span class="sec-sub">조회 기간 : 20260526 - 20260602</span> <span class="info" title="선택 아티스트 멀티 라인 (지표별 전체 펼침)">i</span></div>
       <div class="checklist" id="artistChecklist"></div>
       <div class="tag-area"><span class="lbl">선택됨:</span><div id="tagArea" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
       <div class="trend-grid" id="compareGrid"></div>
@@ -409,13 +409,13 @@ tr:hover td { background: #fafbff; }
     </div>
     <div class="cascade">
       <div class="grp"><label>국가기준</label><span class="toggle-basis"><span class="on" onclick="basisToggle(this)">가입</span><span onclick="basisToggle(this)">배송</span></span></div>
-      <div class="grp"><label>프로젝트</label><select class="fsel"><option>OFFICIAL FANLIGHT</option><option>전체</option></select></div>
-      <div class="grp"><label>아티스트</label><select class="fsel"><option>EXO</option><option>전체</option></select></div>
+      <div class="grp"><label>프로젝트</label><select class="fsel"><option>전체</option><option>OFFICIAL FANLIGHT</option></select></div>
+      <div class="grp"><label>아티스트</label><select class="fsel"><option>전체</option><option>EXO</option></select></div>
       <button class="f-query" style="margin-left:auto">조회</button>
     </div>
 
     <div class="subp on" id="co-ov">
-      <div class="chips"><span class="lbl">선택:</span><span class="chip">가입국가<span class="cx" onclick="this.parentElement.remove()">×</span></span><span class="chip">OFFICIAL FANLIGHT<span class="cx" onclick="this.parentElement.remove()">×</span></span><span class="chip">EXO<span class="cx" onclick="this.parentElement.remove()">×</span></span></div>
+      <div class="chips"><span class="lbl">선택:</span><span class="chip">가입국가<span class="cx" onclick="this.parentElement.remove()">×</span></span><span class="chip">프로젝트 전체<span class="cx" onclick="this.parentElement.remove()">×</span></span><span class="chip">아티스트 전체<span class="cx" onclick="this.parentElement.remove()">×</span></span></div>
       <div class="note warn">* 거래지표는 회원 가입국가/배송국가 기준 구분 가능하나, 방문자수(UV)는 접속국가(IP) 기준입니다.</div>
       <div class="note">조회 기간 <b>총 매출 기준 상위 5개국 + 기타</b> 표기 (색상은 6개국 고정, 그 외 회색) · 마우스오버 시 상세 확인 · 전체 국가는 엑셀 다운로드에서 확인</div>
       <div class="note">* 구성비 분모는 Overview>매출지표 기준 기간 합계 / 도넛 중앙 고객·UV 숫자는 <b>기간 일 평균</b> / 구매전환율(막대)=국가별 기간 평균 / 인당 거래액(막대)=국가별 총거래액÷국가별 구매고객수 합계</div>
@@ -557,7 +557,7 @@ function updModal(){
  const unitLine=m.customer?'월 누적(연도 기준)':UNIT_KO[unit]+' ('+unit+')';
  const ipNote=m.customer?'':'<br>· 인당 지표(인당거래액·인당구매수·인당주문상품수) 엑셀 미제공 <span style="color:#8b909c">(구매전환율은 예외)</span>';
  const aggNote=m.customer?'':'<br>· 엑셀은 집계행(합계·평균) 없이 <b>일/주/월별 원값 행만</b> 제공 <span style="color:#8b909c">(구매고객수·UV·전환율 평균은 화면 전용)</span>';
- const netNote=m.customer?'':'<br>· <b>순(취소반영) 지표</b> 추가 제공: 순 주문상품수·순 구매수량·순 구매고객수'+(curXlMenu==='overview_sales'||curXlMenu==='country_detail'?'·순 주문건수':'')+' <span style="color:#8b909c">(엑셀 전용)</span>';
+ const netNote=m.customer?'':'<br>· <b>순(취소반영) 지표</b> 추가 제공: 순 주문상품수·순 구매수량·순 구매고객수'+(curXlMenu==='overview_sales'||curXlMenu==='country_detail'?'·순 주문건수':'')+' <span style="color:#8b909c">(엑셀 전용 · 취소확정일 차감 · 카운트류는 당일 부분취소 미반영 → 익일 배치 정정)</span>';
  const subNote=curXlMenu==='product_detail'?'<br>· 화면 소계·합계는 엑셀 미노출':'';
  document.getElementById('dlMeta').innerHTML=
   '· 메뉴코드: <b>'+m.code+'</b>'+
@@ -586,7 +586,7 @@ function toast(msg){
 // 공통 추가 로직 (유효성 + 상품명 조회)
 function addPid(raw, list, max, onMax){
  for(const v of raw){
-  if(list.length>=max){ onMax(); break; }
+  if(list.length>=max){ toast('상품은 최대 5개까지 조회할 수 있습니다'); onMax(); break; }
   if(!/^\d+$/.test(v)){ toast('상품ID는 숫자만 입력 가능합니다'); continue; }
   if(!PROD_NAME[v]){ toast('해당 상품을 찾을 수 없습니다'); continue; }
   if(!list.includes(v)) list.push(v);
@@ -599,7 +599,7 @@ let pidList=[];
 function pidKey(e){if(e.key==='Enter'){e.preventDefault();pidAdd();}}
 function pidAdd(){const inp=document.getElementById('pidInput');const raw=inp.value.split(',').map(s=>s.trim()).filter(Boolean);addPid(raw,pidList,5,()=>{document.getElementById('pidHint').textContent='최대 5개까지만 입력 가능합니다';document.getElementById('pidHint').style.color='#e0405e';});inp.value='';renderPid();}
 function pidRemove(v){pidList=pidList.filter(x=>x!==v);renderPid();}
-function renderPid(){document.getElementById('pidTags').innerHTML=pidList.map(v=>pidTagHtml(v,'pidRemove')).join('');const h=document.getElementById('pidHint');h.textContent=pidList.length+'/5 입력됨';h.style.color='#6b9e7e';}
+function renderPid(){document.getElementById('pidTags').innerHTML=pidList.map(v=>pidTagHtml(v,'pidRemove')).join('');const h=document.getElementById('pidHint');h.textContent=pidList.length+'/5 입력됨';h.style.color='#6b9e7e';if(isToday)drawTrend();}
 // 상품 탭 상품ID (입력 시 다른 필터 비활성)
 let pid2List=[];
 function pid2Key(e){if(e.key==='Enter'){e.preventDefault();pid2Add();}}
@@ -616,8 +616,8 @@ function renderPid2(){document.getElementById('pid2Tags').innerHTML=pid2List.map
 const hours=['00시','03시','06시','09시','12시','15시','18시','21시'];
 // granularity별 X축 라벨
 const DAILY_FULL_LBL=['6/1','6/2','6/3','6/4','6/5','6/6','6/7','6/8','6/9','6/10']; // 일간 전체(6/1~6/10)
-const WEEKLY_LBL=['6/1~6/7','6/8~6/14','6/15~6/21'];                                // 주간: 6/1~6/21
-const MONTHLY_LBL=['2026-01','2026-02','2026-03','2026-04','2026-05'];              // 월간: 1~5월
+const WEEKLY_LBL=['2026-W23','2026-W24','2026-W25'];                                // 주간: YYYY-WNN (6/1~6/21)
+const MONTHLY_LBL=['2026.01','2026.02','2026.03','2026.04','2026.05'];              // 월간: YYYY.MM
 const BLUE='#4263eb',GRAY='#cbd0da';
 // 색상 팔레트 (아티스트 비교)
 const PAL=['#4263EB','#F03E5E','#20C997','#FBBF24','#A855F7','#FF922B','#15AABF','#E64980','#82C91E','#7048E8','#1098AD','#F76707'];
@@ -671,9 +671,17 @@ function drawTrend(){
  grid.innerHTML=KPI.map((k,i)=>`<div class="trend-card"><div class="t-head"><span class="t-name">${k.name}</span><span><span class="t-val">${k.val}${k.unit==='%'?'%':''}</span><span class="t-delta ${k.up?'up':'dn'}" style="${isCompare?'':'display:none'}">${k.up?'▲':'▼'}${Math.abs(parseFloat(k.d))}%</span></span></div><div class="trend-chart"><canvas id="tc${i}"></canvas></div></div>`).join('');
  KPI.forEach((k,i)=>{
   const base=getData(k);
-  const ds=[{label:'조회기간',data:base,borderColor:BLUE,backgroundColor:isToday?'rgba(66,99,235,.7)':'rgba(66,99,235,.07)',fill:!isToday,tension:.4,pointRadius:isToday?0:2,borderRadius:isToday?3:0}];
-  if(isCompare&&!isToday){const cmp=base.map(v=>k.ratio?+(v*0.92).toFixed(1):Math.round(v*0.88));ds.push({label:'비교기간',data:cmp,borderColor:GRAY,borderDash:[4,3],backgroundColor:'transparent',tension:.4,pointRadius:2});}
-  const ch=new Chart(document.getElementById('tc'+i),{type:isToday?'bar':'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+(k.unit==='%'?c.parsed.y+'%':c.parsed.y.toLocaleString()+(k.unit==='백만원'?'백만원':k.unit==='K'?'K':''))}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa'}},y:{grid:{color:'#f1f3f6'},ticks:{font:{size:9},color:'#aaa',callback:k.yf}}}}});
+  let ds;
+  if(isToday&&pidList.length){
+   // 오늘 + 상품ID 선택 시: 상품별 색상 구분 스택 막대 (v1.6 정책)
+   const share=[0.5,0.25,0.13,0.08,0.04];
+   ds=pidList.map((pid,pi)=>({label:PROD_NAME[pid]||pid,data:base.map(v=>k.ratio?+(v*share[pi]*2).toFixed(1):Math.round(v*share[pi]*10)/10),backgroundColor:PAL[pi%PAL.length],borderRadius:2,stack:'s'}));
+  }else{
+   ds=[{label:'조회기간',data:base,borderColor:BLUE,backgroundColor:isToday?'rgba(66,99,235,.7)':'rgba(66,99,235,.07)',fill:!isToday,tension:.4,pointRadius:isToday?0:2,borderRadius:isToday?3:0}];
+   if(isCompare&&!isToday){const cmp=base.map(v=>k.ratio?+(v*0.92).toFixed(1):Math.round(v*0.88));ds.push({label:'비교기간',data:cmp,borderColor:GRAY,borderDash:[4,3],backgroundColor:'transparent',tension:.4,pointRadius:2});}
+  }
+  const stacked=isToday&&pidList.length>0;
+  const ch=new Chart(document.getElementById('tc'+i),{type:isToday?'bar':'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:stacked,position:'top',labels:{font:{size:8},boxWidth:8}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+(k.unit==='%'?c.parsed.y+'%':c.parsed.y.toLocaleString()+(k.unit==='백만원'?'백만원':k.unit==='K'?'K':''))}}},scales:{x:{stacked,grid:{display:false},ticks:{font:{size:9},color:'#aaa'}},y:{stacked,grid:{color:'#f1f3f6'},ticks:{font:{size:9},color:'#aaa',callback:k.yf}}}}});
   trendCharts.push(ch);
  });
  updateOvDates(gran);
@@ -739,7 +747,7 @@ function renderArtist(){const data=artists;const cmpOn=document.getElementById('
  if(!document.getElementById(noteId)){const n=document.createElement('div');n.id=noteId;n.className='note';n.style.marginTop='8px';n.innerHTML='* 합산행: 거래액·주문상품수=기간 합계 / 구매고객수·UV=<b>일 평균</b> / 인당 지표=기간 합계 기준(합계 주문상품수÷합계 구매고객수 등) / 구매전환율=일 평균';document.querySelector('#ar-list .tbl-wrap').after(n);}}
 
 // 아티스트 비교분석
-const allArtists=['EXO','aespa','NCT 127','SHINee','Red Velvet','RIIZE'];
+const allArtists=['EXO','aespa','NCT 127','SHINee','Red Velvet','RIIZE','Super Junior','TVXQ','Girls\' Generation','WayV','NCT DREAM','Kai']; // 전체 아티스트(12) 노출 — v1.6
 let selected=['EXO','aespa','NCT 127','SHINee'];
 function initCompare(){renderChecklist();renderTags();drawCompare();}
 function renderChecklist(){document.getElementById('artistChecklist').innerHTML=allArtists.map(a=>`<label class="chk${selected.includes(a)?' on':''}"><input type="checkbox" ${selected.includes(a)?'checked':''} onchange="toggleArtist('${a}')">${a}</label>`).join('')+`<div class="chk-actions"><button class="btn-sm" onclick="selectAllArtist()">전체선택</button><button class="btn-sm" onclick="resetArtist()">초기화</button></div>`;}
@@ -909,8 +917,8 @@ function doDownload(){
  closeModal();
 }
 
-// init
-renderKpi();drawTrend();
+// init — 비교하기는 '전주 동요일 7일' 디폴트 노출 (v1.6 정책)
+renderKpi();drawTrend();toggleCmp();
 </script>
 </body>
 </html>
