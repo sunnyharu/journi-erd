@@ -637,12 +637,12 @@ const CTRY_COLOR={'대한민국':'#4263EB','대만':'#F03E5E','일본':'#FBBF24'
 
 // KPI (daily=6/1~6/9 9포인트 / weekly=3주 / monthly=1~5월 5포인트, ratio=비율지표)
 const KPI=[
- {name:'총 결제거래액',val:'249.8',unit:'백만원',d:'+14.8',up:1,cmp:'217.5백만원',ratio:false,
+ {name:'총 결제거래액',val:'249,800,000',unit:'원',won:true,d:'+14.8',up:1,cmp:'217,500,000원',ratio:false,
   daily:[180,205,198,222,235,228,255,242,250,258], weekly:[1320,1480,1610], monthly:[5200,5800,6100,6400,6800],
-  hourly:[8,5,3,12,28,35,42,30],yf:v=>v+'M'},
- {name:'순 결제거래액',val:'221.3',unit:'백만원',d:'+14.8',up:1,cmp:'192.8백만원',ratio:false,
+  hourly:[8,5,3,12,28,35,42,30],yf:v=>(v*1e6).toLocaleString()},
+ {name:'순 결제거래액',val:'221,300,000',unit:'원',won:true,d:'+14.8',up:1,cmp:'192,800,000원',ratio:false,
   daily:[158,182,176,197,208,202,226,214,221,228], weekly:[1170,1310,1430], monthly:[4600,5100,5400,5700,6050],
-  hourly:[7,4,3,11,25,31,37,27],yf:v=>v+'M'},
+  hourly:[7,4,3,11,25,31,37,27],yf:v=>(v*1e6).toLocaleString()},
  {name:'주문건수',val:'48,302',unit:'건',d:'+14.8',up:1,cmp:'42,100건',ratio:false,
   daily:[4200,5100,4800,5500,5900,5700,6400,6000,6200,6300], weekly:[33800,37500,40200], monthly:[135000,148000,156000,162000,170000],
   hourly:[120,80,60,320,820,1040,1280,640],yf:v=>v>=1000?(v/1000).toFixed(1)+'K':v},
@@ -698,7 +698,7 @@ function drawTrend(){
    ds=[{label:'조회기간',data:base,borderColor:BLUE,backgroundColor:isToday?'rgba(66,99,235,.7)':'rgba(66,99,235,.07)',fill:!isToday,tension:.4,pointRadius:isToday?0:2,borderRadius:isToday?3:0}];
    if(isCompare&&!isToday){const cmp=base.map(v=>k.ratio?+(v*0.92).toFixed(1):Math.round(v*0.88));ds.push({label:'비교기간',data:cmp,borderColor:GRAY,borderDash:[4,3],backgroundColor:'transparent',tension:.4,pointRadius:2});}
   }
-  const ch=new Chart(document.getElementById('tc'+i),{type:(isToday&&!prodMode)?'bar':'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:prodMode||(yesterMode&&isCompare),position:'top',labels:{font:{size:8},boxWidth:8,usePointStyle:true}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+(k.unit==='%'?c.parsed.y+'%':c.parsed.y.toLocaleString()+(k.unit==='백만원'?'백만원':k.unit==='K'?'K':''))}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa'}},y:{grid:{color:'#f1f3f6'},ticks:{font:{size:9},color:'#aaa',callback:k.yf}}}}});
+  const ch=new Chart(document.getElementById('tc'+i),{type:(isToday&&!prodMode)?'bar':'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:prodMode||(yesterMode&&isCompare),position:'top',labels:{font:{size:8},boxWidth:8,usePointStyle:true}},tooltip:{callbacks:{label:c=>{const y=c.parsed.y;let s;if(k.unit==='%')s=y+'%';else if(k.won)s=(y*1e6).toLocaleString()+'원';else s=y.toLocaleString()+(k.unit==='K'?'K':'');return c.dataset.label+': '+s;}}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa'}},y:{grid:{color:'#f1f3f6'},ticks:{font:{size:9},color:'#aaa',callback:k.yf}}}}});
   trendCharts.push(ch);
  });
  updateOvDates(gran);
