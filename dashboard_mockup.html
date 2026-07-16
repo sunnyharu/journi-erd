@@ -129,6 +129,7 @@ tr:hover td { background: #fafbff; }
 .spark { display: flex; align-items: flex-end; gap: 2px; height: 22px; justify-content: flex-end; }
 .spark span { width: 4px; background: #c7d2fe; border-radius: 1px; }
 .spark span:last-child { background: #4263eb; }
+.spark.dot { gap: 6px; }
 .more { text-align: center; padding: 11px; font-size: 12px; color: #8b909c; cursor: pointer; border-top: 1px solid #f1f3f6; }
 .more:hover { background: #fafbff; color: #4263eb; }
 
@@ -307,9 +308,9 @@ tr:hover td { background: #fafbff; }
       <button class="fbtn active" onclick="pickPeriod(this)">최근7일</button>
       <button class="fbtn" onclick="pickPeriod(this)">이번달</button>
       <select class="fsel"><option>일간</option><option>주간</option><option>월간</option></select>
-      <div class="fdate">2026.05.26</div><span class="tilde">~</span><div class="fdate">2026.06.02</div>
-      <button class="fbtn" id="cmpBtn2" onclick="toggleCmp2(this)">비교</button>
-      <div class="compare-fields" id="cmpFields2"><span class="tag">비교</span><div class="fdate">2026.05.19</div><span class="tilde">~</span><div class="fdate">2026.05.25</div></div>
+      <div class="fdate" id="arDS">2026.05.26</div><span class="fdate-box" id="arDEBox"><span class="tilde">~</span><div class="fdate">2026.06.02</div></span>
+      <button class="fbtn active" id="cmpBtn2" onclick="toggleCmp2(this)">비교</button>
+      <div class="compare-fields on" id="cmpFields2"><span class="tag">비교</span><div class="fdate" id="arCmpDS">2026.05.19</div><span class="fdate-box" id="arCmpDEBox"><span class="tilde">~</span><div class="fdate">2026.05.25</div></span></div>
       <div class="f-right"><button class="f-query">조회</button></div>
     </div>
 
@@ -319,7 +320,7 @@ tr:hover td { background: #fafbff; }
         <table id="artistTable">
           <thead><tr>
             <th class="noselect">#</th><th class="noselect">아티스트</th>
-            <th onclick="sortArtist(2)">총 결제거래액</th><th class="noselect" id="diffHead" style="display:none">비교거래액(Diff%)</th>
+            <th onclick="sortArtist(2)">총 결제거래액</th><th class="noselect" id="diffHead" style="display:table-cell">비교거래액(Diff%)</th>
             <th onclick="sortArtist(3)">순 결제거래액</th><th onclick="sortArtist(4)">주문상품수</th>
             <th onclick="sortArtist(5)">구매고객수<br><span style="font-weight:400;color:#8b909c;font-size:10px">일평균</span></th><th onclick="sortArtist(6)">방문자수(UV)<br><span style="font-weight:400;color:#8b909c;font-size:10px">일평균</span></th>
             <th class="noselect">인당 주문상품수</th><th class="noselect">인당 거래액</th>
@@ -484,11 +485,15 @@ function coSub(s,el){document.querySelectorAll('#tab-country .inner-tab').forEac
 // ----- 오늘 모드 -----
 let isToday=false,isCompare=false;
 let ovPending='최근7일', appliedGran='일간';
+let artPeriod='최근7일'; // 아티스트 Overview 조회기간 (spark 표시모드 분기용)
 function pickPeriod(b){const bar=b.closest('.filterbar');bar.querySelectorAll('.fbtn:not([id^=cmpBtn])').forEach(x=>{x.classList.remove('active','today-active');});const today=b.textContent==='오늘';b.classList.add(today?'today-active':'active');
   if(bar.closest('#tab-overview')){ovPending=b.textContent;setTodayUI(today);const y=b.textContent==='어제';setYesterdayUI(y);
    if(y&&!isCompare)toggleCmp(); // 어제 선택 시 비교 디폴트 ON (전전일 자동 세팅)
   }
-  else if(bar.closest('#tab-artist')){setArtistToday(today);}
+  else if(bar.closest('#tab-artist')){artPeriod=b.textContent;setArtistToday(today);const y=b.textContent==='어제';setArtistYesterdayUI(y);
+   if(y&&!document.getElementById('cmpBtn2').classList.contains('active'))setArtistCmp(true); // 어제 → 전전일 비교 디폴트 ON
+   setArtistDates(b.textContent);renderArtist();
+  }
   else if(bar.closest('#tab-country')){setCountryToday(today);}
 }
 // 아티스트/국가: '오늘' 선택 시 비교·단위 비활성 (overview와 동일 규칙). 차트는 시간대별 기준.
@@ -496,7 +501,18 @@ function setArtistToday(today){
   const gran=document.querySelector('#tab-artist .filterbar .fsel'); if(gran)gran.disabled=today;
   const cmp=document.getElementById('cmpBtn2');
   if(cmp){cmp.disabled=today;
-    if(today&&cmp.classList.contains('active')){cmp.classList.remove('active');document.getElementById('cmpFields2').classList.remove('on');document.getElementById('diffHead').style.display='none';renderArtist();}}
+    if(today&&cmp.classList.contains('active'))setArtistCmp(false);} // 오늘 → 비교 X
+}
+// 아티스트 비교 상태 명시적 세팅 (버튼·필드·Diff 헤더·표 동기화)
+function setArtistCmp(on){const b=document.getElementById('cmpBtn2');b.classList.toggle('active',on);document.getElementById('cmpFields2').classList.toggle('on',on);document.getElementById('diffHead').style.display=on?'table-cell':'none';}
+// 어제 선택 시: 메인·비교 날짜를 단일 캘린더로 (어제=단일일, 비교=전전일 단일일)
+function setArtistYesterdayUI(y){document.getElementById('arDEBox').style.display=y?'none':'';document.getElementById('arCmpDEBox').style.display=y?'none':'';}
+// 조회기간별 날짜 필드(샘플) 갱신
+function setArtistDates(p){const ds=document.getElementById('arDS'),cds=document.getElementById('arCmpDS'),deb=document.getElementById('arDEBox'),cdeb=document.getElementById('arCmpDEBox');
+  if(p==='오늘'){ds.textContent='2026.06.10';deb.style.display='none';}
+  else if(p==='어제'){ds.textContent='2026.06.09';cds.textContent='2026.06.08';deb.style.display='none';cdeb.style.display='none';}
+  else if(p==='이번달'){ds.textContent='2026.06.01';deb.querySelector('.fdate').textContent='2026.06.10';deb.style.display='';cds.textContent='2026.05.01';cdeb.querySelector('.fdate').textContent='2026.05.10';cdeb.style.display='';}
+  else{ds.textContent='2026.05.26';deb.querySelector('.fdate').textContent='2026.06.02';deb.style.display='';cds.textContent='2026.05.19';cdeb.querySelector('.fdate').textContent='2026.05.25';cdeb.style.display='';}
 }
 function setCountryToday(today){const gran=document.getElementById('coGran'); if(gran)gran.disabled=today;}
 // 오늘 선택 시 입력 UI 즉시 토글(상품ID/비교/단위) — 단, 차트/날짜는 '조회' 클릭 시 적용
@@ -757,8 +773,19 @@ let artists=[
 const artistsEx=[[13,'Henry',38000,2.1,1,33000,760,500,4200,12.8,1.52,76000,[30,32,34,36,38,40,42]],[14,'Taemin',31000,-1.3,0,27000,620,410,3500,12.1,1.51,75600,[35,34,33,32,31,30,29]]];
 let sortCol=2,sortDir=-1;
 function sortArtist(c){if(sortCol===c)sortDir*=-1;else{sortCol=c;sortDir=-1;}const idx={2:2,3:5,4:6,5:7,6:8,9:9}[c];artists.sort((a,b)=>(a[idx]-b[idx])*sortDir);renderArtist();}
+// Daily Spark: 최근7일·이번달=막대 / 오늘·어제=점(단일일 지표라 추이 막대 대신 점 표기)
+function sparkHtml(a,cmpOn){const v=a[12];
+ if(artPeriod==='오늘'||artPeriod==='어제'){
+  const dot=(h,c)=>`<span style="width:7px;height:7px;border-radius:50%;background:${c};margin-bottom:${Math.round(h/100*14)}px"></span>`;
+  let out;
+  if(artPeriod==='어제'&&cmpOn) out=dot(v[v.length-2],'#c7d2fe')+dot(v[v.length-1],'#4263eb'); // 그제·어제
+  else out=dot(v[v.length-1],'#4263eb');
+  return `<div class="spark dot">${out}</div>`;
+ }
+ return `<div class="spark">${v.map(h=>`<span style="height:${h}%"></span>`).join('')}</div>`;
+}
 function renderArtist(){const data=artists;const cmpOn=document.getElementById('cmpBtn2')?.classList.contains('active');
- document.getElementById('artistBody').innerHTML=data.map((a,i)=>{const cmpVal=Math.round(a[2]/(1+a[3]/100));const av=ARTIST_IMG[a[1]]?`<div class="av"><img src="${ARTIST_IMG[a[1]]}" alt="${a[1]}"></div>`:`<div class="av">img</div>`;return `<tr><td>${i+1}</td><td><div class="aname">${av}${a[1]}</div></td><td>${a[2].toLocaleString()}</td>${cmpOn?`<td style="display:table-cell"><div>${cmpVal.toLocaleString()}</div><div class="${a[3]>0?'up':'dn'}" style="font-size:11px">${a[3]>0?'▲':'▼'} ${Math.abs(a[3])}%</div></td>`:'<td style="display:none"></td>'}<td>${a[5].toLocaleString()}</td><td>${a[6].toLocaleString()}</td><td>${a[7].toLocaleString()}</td><td>${a[8].toLocaleString()}</td><td>${a[10]}</td><td>${a[11].toLocaleString()}</td><td>${a[9]}%</td><td><div class="spark">${a[12].map(h=>`<span style="height:${h}%"></span>`).join('')}</div></td></tr>`;}).join('')
+ document.getElementById('artistBody').innerHTML=data.map((a,i)=>{const cmpVal=Math.round(a[2]/(1+a[3]/100));const av=ARTIST_IMG[a[1]]?`<div class="av"><img src="${ARTIST_IMG[a[1]]}" alt="${a[1]}"></div>`:`<div class="av">img</div>`;return `<tr><td>${i+1}</td><td><div class="aname">${av}${a[1]}</div></td><td>${a[2].toLocaleString()}</td>${cmpOn?`<td style="display:table-cell"><div>${cmpVal.toLocaleString()}</div><div class="${a[3]>0?'up':'dn'}" style="font-size:11px">${a[3]>0?'▲':'▼'} ${Math.abs(a[3])}%</div></td>`:'<td style="display:none"></td>'}<td>${a[5].toLocaleString()}</td><td>${a[6].toLocaleString()}</td><td>${a[7].toLocaleString()}</td><td>${a[8].toLocaleString()}</td><td>${a[10]}</td><td>${a[11].toLocaleString()}</td><td>${a[9]}%</td><td>${sparkHtml(a,cmpOn)}</td></tr>`;}).join('')
  +`<tr class="total-row"><td></td><td>전체 12개 합산</td><td>249,769,000</td>${cmpOn?'<td style="display:table-cell"><div>222,500,000</div><div class="up" style="font-size:11px">▲ 12.3%</div></td>':'<td style="display:none"></td>'}<td>221,300,000</td><td>48,302</td><td>3,863</td><td>27,250</td><td>1.53</td><td>75,400</td><td>14.5%</td><td></td></tr>`;
  const noteId='artistSumNote';
  if(!document.getElementById(noteId)){const n=document.createElement('div');n.id=noteId;n.className='note';n.style.marginTop='8px';n.innerHTML='* 합산행: 거래액·주문상품수=기간 합계 / 구매고객수·UV=<b>일 평균</b> / 인당 지표=기간 합계 기준(합계 주문상품수÷합계 구매고객수 등) / 구매전환율=일 평균';document.querySelector('#ar-list .tbl-wrap').after(n);}}
