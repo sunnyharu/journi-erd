@@ -30,6 +30,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'M
 .sec-title .info .tip b { color: #fff; font-weight: 700; }
 .sec-title .info:hover .tip { display: block; }
 .sec-title .date { color: #1f2330; }
+.sec-title .cmp-date { color: #8b7ad6; font-size: 13px; font-weight: 600; margin-left: 4px; }
 .sec-sub { font-size: 11px; color: #b4b8c2; font-weight: 400; margin-left: 4px; }
 
 /* filter */
@@ -511,7 +512,7 @@ let isToday=false,isCompare=false;
 let ovPending='최근7일', appliedGran='일간';
 let artPeriod='최근7일'; // 아티스트 Overview 조회기간 (spark 표시모드 분기용)
 function pickPeriod(b){const bar=b.closest('.filterbar');bar.querySelectorAll('.fbtn:not([id^=cmpBtn])').forEach(x=>{x.classList.remove('active','today-active');});const today=b.textContent==='오늘';b.classList.add(today?'today-active':'active');
-  if(bar.closest('#tab-overview')){ovPending=b.textContent;setTodayUI(today);const y=b.textContent==='어제';setYesterdayUI(y);
+  if(bar.closest('#tab-overview')){ovPending=b.textContent;ovCustom=false;setTodayUI(today);const y=b.textContent==='어제';setYesterdayUI(y);
    if(y&&!isCompare)toggleCmp(); // 어제 선택 시 비교 디폴트 ON (전전일 자동 세팅)
   }
   else if(bar.closest('#tab-artist')){artPeriod=b.textContent;setArtistToday(today);const y=b.textContent==='어제';
@@ -557,14 +558,15 @@ function setYesterdayUI(y){
 }
 // 조회 버튼 클릭 시에만 확정 적용
 function applyOvQuery(){ovPeriod=ovPending; appliedGran=document.getElementById('ovGran').value; isToday=(ovPending==='오늘'); updSalesDate(); drawTrend();}
-// 매출지표 제목 날짜 = 선택(조회)한 날짜 기준
-function updSalesDate(){let txt;
- if(ovPeriod==='오늘')txt='2026-06-10';
- else if(ovPeriod==='어제')txt='2026-06-09';
- else{const ds=document.getElementById('ovDS').textContent.trim().replace(/\./g,'-'),de=document.getElementById('ovDE').textContent.trim().replace(/\./g,'-');txt=ds===de?ds:ds+' ~ '+de;}
- document.getElementById('salesDate').textContent=txt;
+// 매출지표 제목 날짜 = 선택(조회)한 날짜 기준 (비교 ON 시 비교기간 병기)
+function updSalesDate(){let main,cmp='';
+ if(ovPeriod==='오늘'){main='2026-06-10';}
+ else if(ovPeriod==='어제'){main='2026-06-09'; if(isCompare)cmp='2026-06-08';}
+ else{const ds=document.getElementById('ovDS').textContent.trim().replace(/\./g,'-'),de=document.getElementById('ovDE').textContent.trim().replace(/\./g,'-');main=ds===de?ds:ds+' ~ '+de;
+  if(isCompare){const cs=document.getElementById('cmpDS').textContent.trim().replace(/\./g,'-'),ce=document.getElementById('cmpDE').textContent.trim().replace(/\./g,'-');cmp=cs===ce?cs:cs+' ~ '+ce;}}
+ document.getElementById('salesDate').innerHTML=main+(cmp?` <span class="cmp-date">(비교 ${cmp})</span>`:'');
 }
-function toggleCmp(){if(document.getElementById('cmpBtn').disabled)return;isCompare=!isCompare;document.getElementById('cmpFields').classList.toggle('on',isCompare);document.getElementById('cmpBtn').classList.toggle('active',isCompare);document.getElementById('cmpKpiWrap').classList.toggle('on',isCompare);document.getElementById('cmpLegend').style.display=isCompare?'flex':'none';document.querySelectorAll('#kpiGrid .kpi-delta').forEach(d=>d.classList.toggle('show',isCompare));drawTrend();}
+function toggleCmp(){if(document.getElementById('cmpBtn').disabled)return;isCompare=!isCompare;document.getElementById('cmpFields').classList.toggle('on',isCompare);document.getElementById('cmpBtn').classList.toggle('active',isCompare);document.getElementById('cmpKpiWrap').classList.toggle('on',isCompare);document.getElementById('cmpLegend').style.display=isCompare?'flex':'none';document.querySelectorAll('#kpiGrid .kpi-delta').forEach(d=>d.classList.toggle('show',isCompare));updSalesDate();drawTrend();}
 function toggleCmp2(b){const on=b.classList.toggle('active');document.getElementById('cmpFields2').classList.toggle('on',on);document.getElementById('diffHead').style.display=on?'table-cell':'none';renderArtist();}
 function basisToggle(s){s.parentElement.querySelectorAll('span').forEach(x=>x.classList.remove('on'));s.classList.add('on');}
 // ── 엑셀 다운로드 (v1.4: 메뉴코드 기반 파일명/시트명) ──
@@ -679,6 +681,7 @@ const DAILY_FULL_LBL=['6/1','6/2','6/3','6/4','6/5','6/6','6/7','6/8','6/9','6/1
 const WEEKLY_LBL=['2026-W23','2026-W24','2026-W25'];                                // 주간: YYYY-WNN (6/1~6/21)
 const MONTHLY_LBL=['2026.01','2026.02','2026.03','2026.04','2026.05'];              // 월간: YYYY.MM
 const BLUE='#4263eb',GRAY='#cbd0da';
+let ovCustom=false; // 캘린더로 날짜 직접 선택 시 true → 프리셋 자동 날짜 덮어쓰기 방지
 // 색상 팔레트 (아티스트 비교)
 const PAL=['#4263EB','#F03E5E','#20C997','#FBBF24','#A855F7','#FF922B','#15AABF','#E64980','#82C91E','#7048E8','#1098AD','#F76707'];
 // 국가 고정색
@@ -752,18 +755,21 @@ function drawTrend(){
  });
  updateOvDates(gran);
 }
-// 상단 날짜 픽커를 조회기간/granularity에 맞게 갱신
+// 상단 날짜 픽커를 조회기간/granularity에 맞게 갱신 (캘린더 직접 선택 시엔 유지)
 function updateOvDates(gran){
  const ds=document.getElementById('ovDS'), de=document.getElementById('ovDE');
  if(!ds||!de) return;
- let s,e;
- if(isToday){ s=e='2026.06.10'; }
- else if(gran==='주간'){ s='2026.06.01'; e='2026.06.21'; }
- else if(gran==='월간'){ s='2026.01.01'; e='2026.05.31'; }
- else if(ovPeriod==='어제'){ s=e='2026.06.09'; }
- else if(ovPeriod==='이번달'){ s='2026.06.01'; e='2026.06.10'; }
- else { s='2026.06.03'; e='2026.06.10'; }
- ds.textContent=s; de.textContent=e;
+ if(!ovCustom){
+  let s,e;
+  if(isToday){ s=e='2026.06.10'; }
+  else if(gran==='주간'){ s='2026.06.01'; e='2026.06.21'; }
+  else if(gran==='월간'){ s='2026.01.01'; e='2026.05.31'; }
+  else if(ovPeriod==='어제'){ s=e='2026.06.09'; }
+  else if(ovPeriod==='이번달'){ s='2026.06.01'; e='2026.06.10'; }
+  else { s='2026.06.03'; e='2026.06.10'; }
+  ds.textContent=s; de.textContent=e;
+ }
+ updSalesDate(); // 제목 날짜는 항상 최종 필드값 기준으로 동기화
 }
 
 // 고객지표 테이블 (월별 12컬럼)
@@ -1033,7 +1039,7 @@ function renderCal(){
   `<div class="cal-dow">${CAL_DOW.map((w,i)=>`<span class="${i===6?'sun':''}">${w}</span>`).join('')}</div>`+
   `<div class="cal-grid">${cells}</div>`;
 }
-function calPick(y,m,d){const ds=y+'.'+String(m+1).padStart(2,'0')+'.'+String(d).padStart(2,'0');document.getElementById(calTarget).textContent=ds;closeCal();}
+function calPick(y,m,d){const ds=y+'.'+String(m+1).padStart(2,'0')+'.'+String(d).padStart(2,'0');document.getElementById(calTarget).textContent=ds;if(calTarget==='ovDS'||calTarget==='ovDE')ovCustom=true;updSalesDate();closeCal();}
 function closeCal(){document.getElementById('calPop').classList.remove('on');}
 document.addEventListener('click',e=>{const p=document.getElementById('calPop');if(p.classList.contains('on')&&!p.contains(e.target)&&!e.target.closest('.fdate'))closeCal();});
 
